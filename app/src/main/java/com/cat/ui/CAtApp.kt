@@ -62,6 +62,7 @@ fun CAtApp() {
         Routes.SETTINGS
     )
     var selectedTab by remember { mutableIntStateOf(0) }
+    var dashEpoch by remember { mutableIntStateOf(0) }
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
     val onChat = backStack?.destination?.route == Routes.CHAT
@@ -111,6 +112,7 @@ fun CAtApp() {
     }
 
     fun openTab(index: Int) {
+        if (index == 0) dashEpoch += 1
         selectedTab = index
         navController.navigate(routes[index]) {
             popUpTo(Routes.DASHBOARD) { saveState = true }
@@ -159,6 +161,7 @@ fun CAtApp() {
                             features = features,
                             worlds = worlds,
                             wide = wide,
+                            refreshKey = dashEpoch,
                             onLaunch = { navController.navigate(Routes.CHAT) },
                             onOpenMemory = { openTab(1) }
                         )
@@ -177,7 +180,13 @@ fun CAtApp() {
                         )
                     }
                     composable(Routes.CHAT) {
-                        ChatScreen(onBack = { navController.popBackStack() })
+                        ChatScreen(
+                            wide = wide,
+                            onBack = {
+                                dashEpoch += 1
+                                navController.popBackStack()
+                            }
+                        )
                     }
                 }
             }

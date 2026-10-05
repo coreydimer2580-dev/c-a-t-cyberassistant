@@ -17,12 +17,20 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.cat.CAtApplication
 import com.cat.model.FeatureToggle
 import com.cat.model.WorldState
 import com.cat.ui.theme.NeonCyan
@@ -34,9 +42,21 @@ fun DashboardScreen(
     features: List<FeatureToggle>,
     worlds: List<WorldState>,
     wide: Boolean,
+    refreshKey: Int,
     onLaunch: () -> Unit,
     onOpenMemory: () -> Unit
 ) {
+    val context = LocalContext.current
+    var modeLabel by remember { mutableStateOf("Offline") }
+    var snippet by remember { mutableStateOf("No replies yet") }
+    var memoryCount by remember { mutableIntStateOf(0) }
+    LaunchedEffect(refreshKey) {
+        val app = context.applicationContext as CAtApplication
+        modeLabel = app.prefs.mode.label
+        memoryCount = app.database.memoryDao().count()
+        val last = app.database.chatDao().latestAssistant()?.content?.replace("\n", " ")
+        snippet = last?.take(90)?.ifBlank { null } ?: "No replies yet"
+    }
     if (wide) {
         Row(
             modifier = Modifier
@@ -50,6 +70,7 @@ fun DashboardScreen(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                StatusCard(modeLabel, snippet, memoryCount)
                 Hero()
                 Actions(onLaunch, onOpenMemory)
             }
@@ -78,11 +99,28 @@ fun DashboardScreen(
                 .padding(top = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            StatusCard(modeLabel, snippet, memoryCount)
             Hero()
             Actions(onLaunch, onOpenMemory)
             ModuleList(features)
             WorldList(worlds)
         }
+    }
+}
+
+@Composable
+private fun StatusCard(modeLabel: String, snippet: String, memoryCount: Int) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF10161F), RoundedCornerShape(16.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text("Copilot", color = NeonCyan, fontSize = 20.sp)
+        Text("Mode: $modeLabel", color = NeonLime)
+        Text("Memory notes: $memoryCount", color = Color(0xFFBFE8FF))
+        Text("Last reply: $snippet", color = Color(0xFFEAFBFF))
     }
 }
 
@@ -103,9 +141,9 @@ private fun Hero() {
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Cyber AI Assistant", color = NeonCyan, fontSize = 24.sp)
-                Text("Cover and inner display • Local only", color = Color(0xFFBFE8FF))
+                Text("Cover and inner display • Offline copilot by default", color = Color(0xFFBFE8FF))
                 Text(
-                    "Launch opens a local chat. Nothing is read from the phone.",
+                    "Launch opens chat. Notes stay in this app. Cloud is optional.",
                     color = NeonLime
                 )
             }

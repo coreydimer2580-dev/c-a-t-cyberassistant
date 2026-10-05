@@ -14,4 +14,7 @@ interface MemoryDao {
 
     @Query("DELETE FROM memory")
     suspend fun clearAll()
+
+    @Query("SELECT COUNT(*) FROM memory")
+    suspend fun count(): Int
 }
