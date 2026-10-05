@@ -428,6 +428,8 @@ class CopilotEngine(
             Saved memory stays in C@T hard save (Room) on this phone with no expiry and shows live on screen.
             You set each note True, False, or Unsure. C@T does not decide that and is not a lie detector.
             Confidence words and /remember can add a short note to the evolving memory feed, tagged Unsure until you change it.
+            Autopilot on the chat strip speaks replies and one follow-up, then waits.
+            Evolve writes a short best-so-far note from this chat. Online evolve (optional) uses public Wikipedia only — never browser history.
             Offline answers name the tag on notes your words match.
             C@T does not send texts or place calls. Your phone's own apps do that if you confirm.
             There is no separate message network and no paid API. Cloud is optional and falls back offline.

@@ -41,6 +41,24 @@ class CopilotPrefs(context: Context) {
             prefs.edit().putBoolean(KEY_GROUP, value).apply()
         }
 
+    /** Speak replies + one auto follow-up chip (then wait for user). */
+    var autopilot: Boolean
+        get() = prefs.getBoolean(KEY_AUTOPILOT, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_AUTOPILOT, value).apply()
+        }
+
+    /**
+     * When ON and network is up, do a public Wikipedia/DuckDuckGo lookup
+     * for topic keywords and save an Unsure "online: …" note.
+     * Never reads browser history, OneDrive, or other apps.
+     */
+    var onlineEvolve: Boolean
+        get() = prefs.getBoolean(KEY_ONLINE_EVOLVE, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_ONLINE_EVOLVE, value).apply()
+        }
+
     var baseUrl: String
         get() = prefs.getString(KEY_URL, "").orEmpty()
         set(value) {
@@ -97,6 +115,8 @@ class CopilotPrefs(context: Context) {
         private const val KEY_MODE = "mode"
         private const val KEY_PERSONA = "persona"
         private const val KEY_GROUP = "group_solver"
+        private const val KEY_AUTOPILOT = "autopilot"
+        private const val KEY_ONLINE_EVOLVE = "online_evolve"
         private const val KEY_URL = "base_url"
         private const val KEY_API = "api_key"
         private const val KEY_MODEL = "model"

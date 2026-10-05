@@ -31,6 +31,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -53,6 +54,7 @@ import androidx.compose.ui.unit.sp
 import com.cat.CAtApplication
 import com.cat.ai.AiPersona
 import com.cat.ai.CopilotMode
+import com.cat.ai.SpeechHelper
 import com.cat.data.ChatMessage
 import com.cat.data.MemoryEntity
 import com.cat.tools.PhoneIntents
@@ -80,9 +82,20 @@ fun ChatScreen(wide: Boolean, onOpenWheel: (() -> Unit)? = null) {
     var mode by remember { mutableStateOf(app.prefs.mode) }
     var persona by remember { mutableStateOf(app.prefs.persona) }
     var group by remember { mutableStateOf(app.prefs.groupSolver) }
+    var autopilot by remember { mutableStateOf(app.prefs.autopilot) }
+    var onlineEvolve by remember { mutableStateOf(app.prefs.onlineEvolve) }
     var online by remember { mutableStateOf(isOnline(context)) }
     var streamId by remember { mutableLongStateOf(-1L) }
+    var followUp by remember { mutableStateOf<String?>(null) }
+    var evolveStatus by remember { mutableStateOf<String?>(null) }
+    // One auto follow-up speech per user message; then wait.
+    var autoFollowSpent by remember { mutableStateOf(false) }
     val memories by app.database.memoryDao().observeAll().collectAsState(initial = emptyList())
+    val speech = remember { SpeechHelper(context) }
+
+    DisposableEffect(Unit) {
+        onDispose { speech.shutdown() }
+    }
 
     LaunchedEffect(Unit) {
         messages = app.copilot.history()
@@ -92,9 +105,11 @@ fun ChatScreen(wide: Boolean, onOpenWheel: (() -> Unit)? = null) {
         }
     }
 
-    fun apply(turn: com.cat.data.CopilotRepository.Turn, animate: Boolean) {
+    fun apply(turn: com.cat.data.CopilotRepository.Turn, animate: Boolean, fromUserSend: Boolean) {
         messages = turn.messages
         notice = turn.notice
+        evolveStatus = turn.evolveStatus
+        followUp = turn.followUp
         val last = turn.messages.lastOrNull()
         streamId = if (animate && last?.role == "assistant") last.id else -1L
         val phone = turn.phone
@@ -107,12 +122,24 @@ fun ChatScreen(wide: Boolean, onOpenWheel: (() -> Unit)? = null) {
         }
         persona = app.prefs.persona
         mode = app.prefs.mode
+        if (fromUserSend && autopilot && last?.role == "assistant") {
+            speech.speak(last.content, flush = true)
+            autoFollowSpent = false
+            val chip = turn.followUp
+            if (!chip.isNullOrBlank()) {
+                // One spoken follow-up per user message, then wait.
+                speech.speak(chip, flush = false)
+                autoFollowSpent = true
+            }
+        }
     }
 
-    fun send() {
-        val text = draft
+    fun send(textOverride: String? = null) {
+        val text = textOverride ?: draft
         if (busy || text.isBlank()) return
-        draft = ""
+        if (textOverride == null) draft = ""
+        followUp = null
+        autoFollowSpent = false
         busy = true
         scope.launch {
             val turn = runCatching { app.copilot.send(text) }.getOrElse {
@@ -121,7 +148,7 @@ fun ChatScreen(wide: Boolean, onOpenWheel: (() -> Unit)? = null) {
                     it.message ?: "Send failed"
                 )
             }
-            apply(turn, animate = true)
+            apply(turn, animate = true, fromUserSend = true)
             busy = false
         }
     }
@@ -140,6 +167,9 @@ fun ChatScreen(wide: Boolean, onOpenWheel: (() -> Unit)? = null) {
             mode = mode,
             persona = persona,
             group = group,
+            autopilot = autopilot,
+            onlineEvolve = onlineEvolve,
+            evolveStatus = evolveStatus,
             onMode = {
                 mode = it
                 app.prefs.mode = it
@@ -162,6 +192,15 @@ fun ChatScreen(wide: Boolean, onOpenWheel: (() -> Unit)? = null) {
                 group = it
                 app.prefs.groupSolver = it
             },
+            onAutopilot = {
+                autopilot = it
+                app.prefs.autopilot = it
+                if (!it) speech.stop()
+            },
+            onOnlineEvolve = {
+                onlineEvolve = it
+                app.prefs.onlineEvolve = it
+            },
             onOpenWheel = onOpenWheel
         )
 
@@ -181,8 +220,11 @@ fun ChatScreen(wide: Boolean, onOpenWheel: (() -> Unit)? = null) {
                     Text("AI chat", color = NeonLime, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     TextButton(onClick = {
                         busy = true
+                        speech.stop()
+                        followUp = null
+                        evolveStatus = null
                         scope.launch {
-                            apply(app.copilot.clear(), animate = false)
+                            apply(app.copilot.clear(), animate = false, fromUserSend = false)
                             busy = false
                         }
                     }, enabled = !busy) {
@@ -207,7 +249,7 @@ fun ChatScreen(wide: Boolean, onOpenWheel: (() -> Unit)? = null) {
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     if (messages.isEmpty() && !busy) {
-                        item { EmptyChatHint(persona, group) }
+                        item { EmptyChatHint(persona, group, autopilot) }
                     }
                     items(messages, key = { it.id }) { message ->
                         Bubble(message, stream = message.id == streamId && message.role == "assistant")
@@ -215,6 +257,30 @@ fun ChatScreen(wide: Boolean, onOpenWheel: (() -> Unit)? = null) {
                     if (busy) {
                         item { ThinkingBubble(if (group) "Group" else persona.shortLabel) }
                     }
+                }
+
+                if (!followUp.isNullOrBlank()) {
+                    Text(
+                        text = "Next · tap to ask",
+                        color = Mist,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = followUp.orEmpty(),
+                        color = Color.Black,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(NeonLime)
+                            .clickable(enabled = !busy) {
+                                val q = followUp.orEmpty()
+                                followUp = null
+                                send(q)
+                            }
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                    )
                 }
 
                 Row(
@@ -238,7 +304,7 @@ fun ChatScreen(wide: Boolean, onOpenWheel: (() -> Unit)? = null) {
                                 val turn = runCatching { app.copilot.regenerate() }.getOrElse {
                                     com.cat.data.CopilotRepository.Turn(messages, it.message ?: "Regenerate failed")
                                 }
-                                apply(turn, animate = true)
+                                apply(turn, animate = true, fromUserSend = false)
                                 busy = false
                             }
                         },
@@ -247,8 +313,10 @@ fun ChatScreen(wide: Boolean, onOpenWheel: (() -> Unit)? = null) {
                     OutlinedButton(
                         onClick = {
                             busy = true
+                            speech.stop()
+                            followUp = null
                             scope.launch {
-                                apply(app.copilot.clear(), animate = false)
+                                apply(app.copilot.clear(), animate = false, fromUserSend = false)
                                 busy = false
                             }
                         },
@@ -264,10 +332,18 @@ fun ChatScreen(wide: Boolean, onOpenWheel: (() -> Unit)? = null) {
                 ) {
                     Text("Live AI", color = NeonCyan, fontSize = 20.sp, fontWeight = FontWeight.Black)
                     Text(
-                        "${persona.label} · ${if (group) "Group on" else "Single"} · ${if (online) "Online" else "Offline"}",
+                        buildString {
+                            append(persona.label)
+                            append(if (group) " · Group" else " · Single")
+                            append(if (online) " · Online" else " · Offline")
+                            if (autopilot) append(" · Autopilot")
+                        },
                         color = Mist,
                         fontSize = 12.sp
                     )
+                    if (!evolveStatus.isNullOrBlank()) {
+                        Text(evolveStatus.orEmpty(), color = NeonLime, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
                     LiveMemoryRail(memories)
                 }
             }
@@ -281,8 +357,13 @@ private fun SystemStrip(
     mode: CopilotMode,
     persona: AiPersona,
     group: Boolean,
+    autopilot: Boolean,
+    onlineEvolve: Boolean,
+    evolveStatus: String?,
     onMode: (CopilotMode) -> Unit,
     onGroup: (Boolean) -> Unit,
+    onAutopilot: (Boolean) -> Unit,
+    onOnlineEvolve: (Boolean) -> Unit,
     onOpenWheel: (() -> Unit)?
 ) {
     Column(
@@ -290,7 +371,7 @@ private fun SystemStrip(
             .fillMaxWidth()
             .neonCard(accent = NeonCyan, shape = RoundedCornerShape(14.dp), fill = Panel, glow = 12.dp)
             .padding(10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -299,7 +380,36 @@ private fun SystemStrip(
         ) {
             StatusChip(if (online) "Online" else "Offline", if (online) NeonLime else NeonMagenta)
             StatusChip(persona.shortLabel, NeonCyan)
-            if (group) StatusChip("Group", NeonMagenta)
+            if (!evolveStatus.isNullOrBlank()) {
+                StatusChip(evolveStatus.take(28), NeonLime)
+            }
+            StatusChip(
+                label = if (autopilot) "Autopilot ON" else "Autopilot",
+                accent = if (autopilot) NeonLime else Mist,
+                selected = autopilot,
+                onClick = { onAutopilot(!autopilot) }
+            )
+            StatusChip(
+                label = if (onlineEvolve) "Online evolve ON" else "Online evolve",
+                accent = if (onlineEvolve) NeonCyan else Mist,
+                selected = onlineEvolve,
+                onClick = { onOnlineEvolve(!onlineEvolve) }
+            )
+            StatusChip(
+                label = if (group) "Group ON" else "Group",
+                accent = if (group) NeonMagenta else Mist,
+                selected = group,
+                onClick = { onGroup(!group) }
+            )
+            if (onOpenWheel != null) {
+                StatusChip("Wheel", NeonCyan, onClick = onOpenWheel)
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             CopilotMode.entries.forEach { item ->
                 StatusChip(
                     label = item.label,
@@ -307,15 +417,6 @@ private fun SystemStrip(
                     selected = mode == item,
                     onClick = { onMode(item) }
                 )
-            }
-            StatusChip(
-                label = if (group) "Group ON" else "Group OFF",
-                accent = if (group) NeonMagenta else Mist,
-                selected = group,
-                onClick = { onGroup(!group) }
-            )
-            if (onOpenWheel != null) {
-                StatusChip("Wheel", NeonCyan, onClick = onOpenWheel)
             }
         }
     }
@@ -342,7 +443,7 @@ private fun StatusChip(
 }
 
 @Composable
-private fun EmptyChatHint(persona: AiPersona, group: Boolean) {
+private fun EmptyChatHint(persona: AiPersona, group: Boolean, autopilot: Boolean) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -352,14 +453,19 @@ private fun EmptyChatHint(persona: AiPersona, group: Boolean) {
     ) {
         Text("Ask anything", color = NeonLime, fontWeight = FontWeight.Black, fontSize = 22.sp)
         Text(
-            if (group) {
-                "Group solver will spin Analyst, Coder, and Coach, then merge a verdict."
-            } else {
-                "${persona.label} will answer. Offline works without Wi‑Fi."
+            when {
+                group -> "Group solver spins Analyst, Coder, and Coach, then merges a verdict."
+                autopilot -> "Autopilot speaks replies and one follow-up, then waits for you."
+                else -> "${persona.label} answers here. Offline works without Wi‑Fi."
             },
             color = Mist
         )
-        Text("Try: plan my day · /remember tea is at 4 · explain this simply", color = Paper, fontSize = 13.sp)
+        Text(
+            "Evolve learns from this chat. Online evolve (optional) uses public Wikipedia — never browser history.",
+            color = Paper,
+            fontSize = 13.sp
+        )
+        Text("Try: plan my day · /remember tea is at 4 · explain this simply", color = NeonCyan, fontSize = 13.sp)
     }
 }
 

@@ -4,7 +4,9 @@ import com.cat.ai.AiPersona
 import com.cat.ai.CloudChatClient
 import com.cat.ai.CopilotEngine
 import com.cat.ai.CopilotMode
+import com.cat.ai.EvolveEngine
 import com.cat.ai.GroupSolver
+import com.cat.ai.OnlineEvolveClient
 import com.cat.tools.AuPhone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -16,12 +18,17 @@ class CopilotRepository(
     private val prefs: CopilotPrefs,
     private val engine: CopilotEngine = CopilotEngine(),
     private val cloud: CloudChatClient = CloudChatClient(),
+    private val onlineEvolve: OnlineEvolveClient = OnlineEvolveClient(),
     private val networkAvailable: () -> Boolean = { true }
 ) {
     data class Turn(
         val messages: List<ChatMessage>,
         val notice: String?,
-        val phone: AuPhone.PhoneCommand? = null
+        val phone: AuPhone.PhoneCommand? = null,
+        /** One offline follow-up chip for Autopilot (at most one per user message). */
+        val followUp: String? = null,
+        /** One-line evolving status for the chat strip. */
+        val evolveStatus: String? = null
     )
 
     suspend fun history(): List<ChatMessage> = database.chatDao().getAll()
@@ -62,7 +69,8 @@ class CopilotRepository(
         if (!offline.todoToAdd.isNullOrBlank()) {
             prefs.saveTodos(prefs.loadTodos() + (false to offline.todoToAdd))
         }
-        return storeReply(offline, persona)
+        val turn = storeReply(offline, persona)
+        return finishEvolve(prepared.text, turn)
     }
 
     suspend fun regenerate(): Turn {
@@ -81,7 +89,8 @@ class CopilotRepository(
         if (prefs.groupSolver && !offline.skipCloud) {
             return groupTurn(lastUser.content, prior, lines, tags, persona, persist = false, seed = offline)
         }
-        return storeReply(offline, persona)
+        val turn = storeReply(offline, persona)
+        return finishEvolve(lastUser.content, turn, persistOnline = false)
     }
 
     private suspend fun groupTurn(
@@ -102,7 +111,6 @@ class CopilotRepository(
         }
         val replies = deferred.map { it.await() }.toMutableList()
 
-        // Optional cloud voice when mode allows and network/config work
         val wantCloud = prefs.mode == CopilotMode.CLOUD || prefs.mode == CopilotMode.AUTO
         var notice: String? = "Group solver · offline voices"
         if (wantCloud) {
@@ -136,7 +144,8 @@ class CopilotRepository(
                 personaId = "group"
             )
         )
-        Turn(history(), notice)
+        val turn = Turn(history(), notice)
+        finishEvolve(question, turn, persistOnline = persist)
     }
 
     private suspend fun localPhoneTurn(prepared: CopilotEngine.Prepared, phone: AuPhone.PhoneCommand): Turn {
@@ -160,7 +169,7 @@ class CopilotRepository(
                 personaId = AiPersona.OFFLINE_CAT.id
             )
         )
-        return Turn(history(), null, phone)
+        return Turn(history(), null)
     }
 
     private suspend fun storeReply(offline: CopilotEngine.OfflineResult, persona: AiPersona): Turn {
@@ -180,6 +189,74 @@ class CopilotRepository(
             )
         )
         return Turn(history(), notice)
+    }
+
+    /**
+     * Offline "best so far" evolve + optional public online lookup.
+     * Never reads browser history, OneDrive, or other apps.
+     */
+    private suspend fun finishEvolve(
+        userText: String,
+        turn: Turn,
+        persistOnline: Boolean = true
+    ): Turn {
+        val chat = turn.messages.takeLast(12).map { it.role to it.content }
+        val memories = database.memoryDao().getAll().map { it.content }
+        val evolved = EvolveEngine.bestSoFar(chat, memories)
+        var status = evolved?.statusLine
+        var notice = turn.notice
+
+        if (evolved != null) {
+            val lastBest = memories.firstOrNull { it.startsWith("best so far:", ignoreCase = true) }
+            if (lastBest != evolved.summary) {
+                database.memoryDao().insert(
+                    MemoryEntity(
+                        content = evolved.summary,
+                        category = "evolve",
+                        createdAt = System.currentTimeMillis(),
+                        truthTag = TruthTag.UNSURE
+                    )
+                )
+            }
+        }
+
+        if (persistOnline && prefs.onlineEvolve) {
+            val online = runCatching { networkAvailable() }.getOrDefault(false)
+            if (!online) {
+                notice = listOfNotNull(notice, "Online evolve skipped — offline.").joinToString(" ")
+                status = (status ?: "Evolving") + " · offline only"
+            } else {
+                val topic = EvolveEngine.rankTopics(listOf(userText) + memories.take(3))
+                    .take(4)
+                    .joinToString(" ")
+                    .ifBlank { userText.take(40) }
+                val hit = withContext(Dispatchers.IO) {
+                    runCatching { onlineEvolve.lookup(topic) }.getOrNull()
+                }
+                if (hit != null) {
+                    val already = memories.any { it == hit.note }
+                    if (!already) {
+                        database.memoryDao().insert(
+                            MemoryEntity(
+                                content = hit.note.take(220),
+                                category = "online",
+                                createdAt = System.currentTimeMillis(),
+                                truthTag = TruthTag.UNSURE
+                            )
+                        )
+                    }
+                    status = (status ?: "Evolving") + " · online ${hit.source}"
+                } else {
+                    notice = listOfNotNull(notice, "Online evolve found nothing public.").joinToString(" ")
+                    status = (status ?: "Evolving") + " · no public hit"
+                }
+            }
+        }
+
+        val assistant = turn.messages.lastOrNull { it.role == "assistant" }?.content.orEmpty()
+        val followUp = EvolveEngine.followUpPrompt(userText, assistant, memories)
+
+        return turn.copy(followUp = followUp, evolveStatus = status, notice = notice)
     }
 
     private fun personaLabelForStore(persona: AiPersona, notice: String?): String {

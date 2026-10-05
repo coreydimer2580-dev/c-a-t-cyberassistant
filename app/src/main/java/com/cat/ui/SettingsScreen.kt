@@ -137,6 +137,14 @@ private fun CopilotSettings() {
         "Offline is the default (Australia/Perth, en-AU). It never waits on Wi-Fi. Cloud and Auto use a network only when one is available, then fall back offline.",
         color = Color(0xFFBFE8FF)
     )
+    Text(
+        "Autopilot (chat strip): speaks replies with TTS (en-AU) and one follow-up question, then waits for you.",
+        color = NeonLime
+    )
+    Text(
+        "Online evolve (chat strip): optional public Wikipedia / DuckDuckGo lookup only. Never reads browser history, OneDrive, or other apps.",
+        color = NeonCyan
+    )
 
     Text(
         "Forever backup: memory stays on this phone. When you ask Grok Bot to backup, exports go to the Google Drive folder C@T-Memory. C@T does not upload by itself.",

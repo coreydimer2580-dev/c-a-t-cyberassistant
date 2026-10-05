@@ -131,7 +131,7 @@ fun CAtApp() {
                         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                             CatWordmark(size = 40.sp)
                             Text(
-                                "v1.6 · AI",
+                                "v1.7 · Autopilot",
                                 color = NeonLime,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Black,
@@ -197,8 +197,8 @@ private fun NeonSidebar(
             .padding(14.dp)
     ) {
         CatWordmark(size = 40.sp)
-        Text("v1.6 · AI first", color = NeonLime, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        Text("Chat · Wheel · Memory", color = NeonMagenta, fontSize = 11.sp, modifier = Modifier.padding(bottom = 16.dp))
+        Text("v1.7 · Autopilot", color = NeonLime, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Text("Chat · Evolve · Speak", color = NeonMagenta, fontSize = 11.sp, modifier = Modifier.padding(bottom = 16.dp))
         tabs.forEachIndexed { index, title ->
             SideItem(
                 label = title,
