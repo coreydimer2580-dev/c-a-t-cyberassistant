@@ -1,34 +1,44 @@
 # C@T - Cyber AI Assistant
 
-C@T is an Android app shell (Kotlin, Jetpack Compose, Room, Navigation) with a neon cyberpunk UI. It is a normal installable APK for phones such as the Samsung Galaxy Z Fold 6. It is not a ROM, not firmware, and it does not scan the phone.
+Version 1.1. Kotlin, Jetpack Compose, Room, and Navigation. Neon cyberpunk UI for phones such as the Samsung Galaxy Z Fold 6 (cover screen stays one column; the inner display, 600dp and wider, uses multiple columns). This is a normal APK. It is not a ROM and it does not scan the phone.
 
 ## What this build does
 
-- Dashboard, Memory, Voice, World, and Settings tabs
-- In-app feature toggles, memory stacks, voice profiles, and world states
-- A local Room database (`cat-memory.db`) created on launch
-- A paste-in privacy filter that redacts emails, SSNs, card-like numbers, phone numbers, and secret keywords from text you type
+- Dashboard, Memory, Voice, World, and Settings, plus a local Assistant chat opened from Launch
+- Chat runs a privacy filter on send and replies with `C@T online — filtered your input` plus the filtered text
+- Memory notes are stored in a local Room database (`cat-memory.db`): add, list, and clear
+- Settings toggles update on screen and are reflected on the Dashboard
+- Paste-in filter for emails, SSNs, card-like numbers, phone numbers, and secret keywords
 
 ## What this build does not do
 
-- It does not read your files, photos, messages, or tap history
+- It does not read files, photos, messages, or tap history
 - It does not investigate people or score truth vs lies
-- The microphone is not used
+- The microphone and shared storage are not used
 
-## Phone install (Galaxy Z Fold 6)
+## Install from GitHub Releases
 
-1. Push this project to GitHub and run the **Build C@T APK** workflow (Actions tab), or build locally.
-2. Download the APK artifact (`app-release.apk`).
-3. On the Fold, open the APK from Files or Chrome.
-4. If Android blocks it, allow installs from that app: Settings → Security and privacy → Install unknown apps.
-5. The inner and cover screens both run the same universal APK. This build is signed with the debug keystore so it can be sideloaded. It is not a Play Store upload key.
+After version `v1.1` is published, the APK URL looks like:
+
+`https://github.com/coreydimer2580-dev/c-a-t-cyberassistant/releases/download/v1.1/app-release.apk`
+
+Example for this account:
+
+`https://github.com/coreydimer2580-dev/c-a-t-cyberassistant/releases/download/v1.1/app-release.apk`
+
+Latest-release pattern (only works if that release has an asset named `app-release.apk`):
+
+`https://github.com/coreydimer2580-dev/c-a-t-cyberassistant/releases/latest/download/app-release.apk`
+
+On the Fold 6, open that link in Chrome, download the APK, and allow installs if Android asks (Settings, Security and privacy, Install unknown apps). The same APK runs on the cover and the inner display. It is signed with the debug keystore for sideload, not a Play Store upload key.
+
+You can also download the APK from the **Build C@T APK** Actions artifact without creating a Release.
 
 ## Local build
 
 Requires JDK 17+ and Android SDK platform 34.
 
 ```bash
-# local.properties should contain sdk.dir=/path/to/android-sdk
 ./gradlew assembleDebug
 ./gradlew assembleRelease
 ```
@@ -38,4 +48,4 @@ Release APK: `app/build/outputs/apk/release/app-release.apk`
 
 ## GitHub Actions
 
-`.github/workflows/build-apk.yml` checks out the repo, installs JDK 17 and the Android SDK, runs `./gradlew assembleRelease`, and uploads the APK artifact.
+`.github/workflows/build-apk.yml` runs on push to `main` and on `workflow_dispatch`. It runs `./gradlew assembleRelease` and uploads `app/build/outputs/apk/release/*.apk`.

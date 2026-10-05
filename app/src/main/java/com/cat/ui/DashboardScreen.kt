@@ -32,55 +32,103 @@ import com.cat.ui.theme.NeonMagenta
 @Composable
 fun DashboardScreen(
     features: List<FeatureToggle>,
-    worlds: List<WorldState>
+    worlds: List<WorldState>,
+    wide: Boolean,
+    onLaunch: () -> Unit,
+    onOpenMemory: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text(
-            text = "C@T",
-            color = NeonCyan,
-            fontSize = 42.sp
-        )
+    if (wide) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .weight(1.1f)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Hero()
+                Actions(onLaunch, onOpenMemory)
+            }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                ModuleList(features)
+            }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                WorldList(worlds)
+            }
+        }
+    } else {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(top = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Hero()
+            Actions(onLaunch, onOpenMemory)
+            ModuleList(features)
+            WorldList(worlds)
+        }
+    }
+}
 
+@Composable
+private fun Hero() {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(text = "C@T", color = NeonCyan, fontSize = 42.sp)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color(0xFF0D0D14), RoundedCornerShape(24.dp))
                 .border(
                     width = 2.dp,
-                    brush = Brush.linearGradient(
-                        listOf(NeonCyan, NeonMagenta, NeonLime)
-                    ),
+                    brush = Brush.linearGradient(listOf(NeonCyan, NeonMagenta, NeonLime)),
                     shape = RoundedCornerShape(24.dp)
                 )
                 .padding(20.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Cyber AI Assistant", color = NeonCyan, fontSize = 24.sp)
-                Text("Offline-first shell • Private • On this device", color = Color(0xFFBFE8FF))
+                Text("Cover and inner display • Local only", color = Color(0xFFBFE8FF))
                 Text(
-                    "Local notes, UI modules, and a paste-in privacy filter. No device scan.",
+                    "Launch opens a local chat. Nothing is read from the phone.",
                     color = NeonLime
                 )
             }
         }
+    }
+}
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            ActionButton("Launch", NeonCyan, Color.Black)
-            ActionButton("Search", NeonMagenta, Color.White)
-            ActionButton("Memory", NeonLime, Color.Black)
-        }
+@Composable
+private fun Actions(onLaunch: () -> Unit, onOpenMemory: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        ActionButton("Launch", NeonCyan, Color.Black, onLaunch)
+        ActionButton("Search", NeonMagenta, Color.White) {}
+        ActionButton("Memory", NeonLime, Color.Black, onOpenMemory)
+    }
+}
 
+@Composable
+private fun ModuleList(features: List<FeatureToggle>) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Modules", color = NeonCyan, fontSize = 20.sp)
-
         features.forEach { feature ->
             Row(
                 modifier = Modifier
@@ -97,9 +145,13 @@ fun DashboardScreen(
                 )
             }
         }
+    }
+}
 
+@Composable
+private fun WorldList(worlds: List<WorldState>) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Worlds", color = NeonCyan, fontSize = 20.sp)
-
         worlds.forEach { world ->
             Box(
                 modifier = Modifier
@@ -121,10 +173,11 @@ fun DashboardScreen(
 private fun RowScope.ActionButton(
     label: String,
     color: Color,
-    textColor: Color
+    textColor: Color,
+    onClick: () -> Unit
 ) {
     Button(
-        onClick = {},
+        onClick = onClick,
         modifier = Modifier.weight(1f),
         colors = ButtonDefaults.buttonColors(
             containerColor = color,
