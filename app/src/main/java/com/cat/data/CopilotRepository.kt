@@ -1,10 +1,14 @@
 package com.cat.data
 
+import com.cat.ai.AiPersona
 import com.cat.ai.CloudChatClient
 import com.cat.ai.CopilotEngine
 import com.cat.ai.CopilotMode
+import com.cat.ai.GroupSolver
 import com.cat.tools.AuPhone
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 
 class CopilotRepository(
@@ -41,18 +45,24 @@ class CopilotRepository(
                 role = "user",
                 content = prepared.text,
                 createdAt = System.currentTimeMillis(),
-                filtered = prepared.filtered
+                filtered = prepared.filtered,
+                personaId = ""
             )
         )
         val all = database.chatDao().getAll()
         val prior = all.dropLast(1).map { it.role to it.content }
         val (lines, tags) = taggedMemory()
-        val offline = engine.respond(prepared.text, prior, lines, todoLines(), tags)
+        val persona = prefs.persona
+        val offline = engine.respond(prepared.text, prior, lines, todoLines(), tags, persona)
+        // Slash/tool replies stay single-voice; group solver is for open questions.
+        if (prefs.groupSolver && !offline.skipCloud) {
+            return groupTurn(prepared.text, prior, lines, tags, persona, seed = offline)
+        }
         persistLearned(offline)
         if (!offline.todoToAdd.isNullOrBlank()) {
             prefs.saveTodos(prefs.loadTodos() + (false to offline.todoToAdd))
         }
-        return storeReply(offline)
+        return storeReply(offline, persona)
     }
 
     suspend fun regenerate(): Turn {
@@ -65,9 +75,68 @@ class CopilotRepository(
         all.drop(lastUserIndex + 1).forEach { database.chatDao().deleteById(it.id) }
         val prior = all.take(lastUserIndex).map { it.role to it.content }
         val (lines, tags) = taggedMemory()
-        val offline = engine.respond(lastUser.content, prior, lines, todoLines(), tags)
+        val persona = prefs.persona
+        val offline = engine.respond(lastUser.content, prior, lines, todoLines(), tags, persona)
             .copy(memoryToSave = null, todoToAdd = null, learnToSave = null)
-        return storeReply(offline)
+        if (prefs.groupSolver && !offline.skipCloud) {
+            return groupTurn(lastUser.content, prior, lines, tags, persona, persist = false, seed = offline)
+        }
+        return storeReply(offline, persona)
+    }
+
+    private suspend fun groupTurn(
+        question: String,
+        prior: List<Pair<String, String>>,
+        lines: List<String>,
+        tags: List<String>,
+        selected: AiPersona,
+        persist: Boolean = true,
+        seed: CopilotEngine.OfflineResult? = null
+    ): Turn = coroutineScope {
+        val roster = GroupSolver.pickGroupPersonas(selected)
+        val deferred = roster.map { persona ->
+            async(Dispatchers.Default) {
+                val result = engine.respondAs(question, prior, lines, persona, tags, todoLines())
+                GroupSolver.PersonaReply(persona, result.textClean())
+            }
+        }
+        val replies = deferred.map { it.await() }.toMutableList()
+
+        // Optional cloud voice when mode allows and network/config work
+        val wantCloud = prefs.mode == CopilotMode.CLOUD || prefs.mode == CopilotMode.AUTO
+        var notice: String? = "Group solver · offline voices"
+        if (wantCloud) {
+            val cloudText = runCatching { pullCloud() }.getOrElse { err ->
+                notice = "Group solver · cloud skipped (${err.message?.take(80) ?: "error"})"
+                null
+            }
+            if (!cloudText.isNullOrBlank()) {
+                replies.add(GroupSolver.PersonaReply(AiPersona.CLOUD_GPT, cloudText.trim()))
+                notice = "Group solver · offline + cloud"
+            } else if (notice == "Group solver · offline voices" && prefs.mode == CopilotMode.CLOUD) {
+                notice = "Group solver · cloud unavailable, offline only"
+            }
+        }
+
+        val merged = GroupSolver.merge(question, replies)
+        if (persist) {
+            val learn = seed ?: engine.respond(question, prior, lines, todoLines(), tags, selected)
+            persistLearned(learn)
+            if (!learn.todoToAdd.isNullOrBlank()) {
+                prefs.saveTodos(prefs.loadTodos() + (false to learn.todoToAdd))
+            }
+        }
+        val stored = engine.prepare(merged)
+        database.chatDao().insert(
+            ChatMessage(
+                role = "assistant",
+                content = stored.text.ifBlank { "Group solver had an empty reply." },
+                createdAt = System.currentTimeMillis(),
+                filtered = stored.filtered,
+                personaId = "group"
+            )
+        )
+        Turn(history(), notice)
     }
 
     private suspend fun localPhoneTurn(prepared: CopilotEngine.Prepared, phone: AuPhone.PhoneCommand): Turn {
@@ -77,7 +146,8 @@ class CopilotRepository(
                 role = "user",
                 content = prepared.text,
                 createdAt = now,
-                filtered = prepared.filtered
+                filtered = prepared.filtered,
+                personaId = ""
             )
         )
         val stored = engine.prepare(phone.reply)
@@ -86,28 +156,47 @@ class CopilotRepository(
                 role = "assistant",
                 content = stored.text.ifBlank { phone.reply },
                 createdAt = now + 1,
-                filtered = stored.filtered
+                filtered = stored.filtered,
+                personaId = AiPersona.OFFLINE_CAT.id
             )
         )
         return Turn(history(), null, phone)
     }
 
-    private suspend fun storeReply(offline: CopilotEngine.OfflineResult): Turn {
-        val (reply, notice) = resolve(offline)
+    private suspend fun storeReply(offline: CopilotEngine.OfflineResult, persona: AiPersona): Turn {
+        val (reply, notice) = resolve(offline, persona)
         val stored = engine.prepare(reply)
         database.chatDao().insert(
             ChatMessage(
                 role = "assistant",
                 content = stored.text.ifBlank { "C@T had an empty reply." },
                 createdAt = System.currentTimeMillis(),
-                filtered = stored.filtered
+                filtered = stored.filtered,
+                personaId = if (notice != null && prefs.mode != CopilotMode.OFFLINE) {
+                    AiPersona.OFFLINE_CAT.id
+                } else {
+                    personaLabelForStore(persona, notice)
+                }
             )
         )
         return Turn(history(), notice)
     }
 
-    private suspend fun resolve(offline: CopilotEngine.OfflineResult): Pair<String, String?> {
-        if (offline.skipCloud || prefs.mode == CopilotMode.OFFLINE) {
+    private fun personaLabelForStore(persona: AiPersona, notice: String?): String {
+        if (notice != null && (notice.contains("Answered offline") || notice.contains("No network") || notice.contains("No cloud"))) {
+            return if (persona.isModePersona) AiPersona.OFFLINE_CAT.id else persona.id
+        }
+        return when {
+            persona.linkedMode == CopilotMode.CLOUD && notice == null -> AiPersona.CLOUD_GPT.id
+            persona.linkedMode == CopilotMode.AUTO && notice == null && prefs.mode == CopilotMode.AUTO ->
+                if (prefs.baseUrl.isNotBlank()) AiPersona.CLOUD_GPT.id else AiPersona.OFFLINE_CAT.id
+            else -> persona.id
+        }
+    }
+
+    private suspend fun resolve(offline: CopilotEngine.OfflineResult, persona: AiPersona): Pair<String, String?> {
+        val mode = persona.linkedMode ?: prefs.mode
+        if (offline.skipCloud || mode == CopilotMode.OFFLINE) {
             return offline.reply to null
         }
         val online = runCatching { networkAvailable() }.getOrDefault(false)
@@ -118,10 +207,7 @@ class CopilotRepository(
             return offline.reply to "No cloud base URL. Answered offline."
         }
         return try {
-            val messages = cloudMessages()
-            val raw = withContext(Dispatchers.IO) {
-                cloud.complete(prefs.baseUrl, prefs.apiKey, prefs.model, messages)
-            }
+            val raw = pullCloud(persona)
             if (raw.isBlank()) {
                 offline.reply to "Cloud returned an empty reply. Answered offline."
             } else {
@@ -133,13 +219,25 @@ class CopilotRepository(
         }
     }
 
-    private suspend fun cloudMessages(): List<Pair<String, String>> {
+    private suspend fun pullCloud(persona: AiPersona = prefs.persona): String {
+        val messages = cloudMessages(persona)
+        return withContext(Dispatchers.IO) {
+            cloud.complete(prefs.baseUrl, prefs.apiKey, prefs.model, messages)
+        }
+    }
+
+    private suspend fun cloudMessages(persona: AiPersona): List<Pair<String, String>> {
         val notes = database.memoryDao().getAll().take(12).joinToString("\n") {
             "[${TruthTag.normalize(it.truthTag)}] ${it.content}"
         }.ifBlank { "(none)" }
+        val style = if (persona.isModePersona) {
+            "Be concise, direct, and actionable."
+        } else {
+            "Persona: ${persona.label}. ${persona.styleHint}"
+        }
         val system = """
             You are C@T, a privacy-first assistant on the user's Android phone in Australia.
-            Default behaviour is offline. Be concise, direct, and actionable.
+            Default behaviour is offline. $style
             You only know the chat and memory notes in this request.
             Do not claim you scanned the phone, files, messages, or sensors.
             Do not claim you can send SMS or place calls yourself. The phone's own apps do that.
@@ -151,10 +249,6 @@ class CopilotRepository(
         """.trimIndent()
         val history = database.chatDao().getAll().takeLast(16).map { it.role to it.content }
         return listOf("system" to system) + history
-    }
-
-    private suspend fun memoryLines(): List<String> {
-        return database.memoryDao().getAll().map { it.content }
     }
 
     private suspend fun taggedMemory(): Pair<List<String>, List<String>> {
@@ -192,4 +286,6 @@ class CopilotRepository(
             if (done) "done: $text" else "open: $text"
         }
     }
+
+    private fun CopilotEngine.OfflineResult.textClean(): String = reply.trim()
 }

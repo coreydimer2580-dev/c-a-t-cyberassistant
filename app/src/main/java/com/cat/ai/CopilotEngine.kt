@@ -32,10 +32,11 @@ class CopilotEngine(
         recentChat: List<Pair<String, String>>,
         memories: List<String>,
         todos: List<String> = emptyList(),
-        memoryTags: List<String> = emptyList()
+        memoryTags: List<String> = emptyList(),
+        persona: AiPersona = AiPersona.OFFLINE_CAT
     ): OfflineResult {
         val clean = filter.sanitize(userText).trim()
-        val result = dispatch(clean, recentChat, memories, todos, memoryTags)
+        val result = dispatch(clean, recentChat, memories, todos, memoryTags, persona)
         val learned = result.learnToSave ?: learnCandidate(clean)
         if (learned.isNullOrBlank()) return result
         val queued = result.copy(learnToSave = learned.take(160))
@@ -46,12 +47,27 @@ class CopilotEngine(
         )
     }
 
+    /** Persona-flavoured offline answer without memory side effects (group solver). */
+    fun respondAs(
+        userText: String,
+        recentChat: List<Pair<String, String>>,
+        memories: List<String>,
+        persona: AiPersona,
+        memoryTags: List<String> = emptyList(),
+        todos: List<String> = emptyList()
+    ): OfflineResult {
+        val clean = filter.sanitize(userText).trim()
+        return dispatch(clean, recentChat, memories, todos, memoryTags, persona)
+            .copy(memoryToSave = null, todoToAdd = null, learnToSave = null)
+    }
+
     private fun dispatch(
         clean: String,
         recentChat: List<Pair<String, String>>,
         memories: List<String>,
         todos: List<String>,
-        memoryTags: List<String>
+        memoryTags: List<String>,
+        persona: AiPersona = AiPersona.OFFLINE_CAT
     ): OfflineResult {
         if (clean.isEmpty()) {
             return OfflineResult("C@T here. Send a message and I'll work with it locally. Wi-Fi is not required.")
@@ -92,12 +108,15 @@ class CopilotEngine(
         }
         if (isGreeting(lower) && clean.length < 48) {
             return OfflineResult(
-                "C@T offline, Australia/Perth, en-AU. Wi-Fi is not required. " +
-                    "Try /help, /remember <fact>, /recall, or /tools."
+                styleReply(
+                    persona,
+                    "C@T offline, Australia/Perth, en-AU. Wi-Fi is not required. " +
+                        "Try /help, /remember <fact>, /recall, or /tools."
+                )
             )
         }
         return OfflineResult(
-            reply = contextualReply(clean, recentChat, memories, memoryTags),
+            reply = styleReply(persona, contextualReply(clean, recentChat, memories, memoryTags)),
             skipCloud = false
         )
     }
@@ -345,6 +364,28 @@ class CopilotEngine(
             )
         }
         return parts.joinToString("\n")
+    }
+
+
+    private fun styleReply(persona: AiPersona, body: String): String {
+        if (persona == AiPersona.OFFLINE_CAT || persona.isModePersona) {
+            return body
+        }
+        val prefix = when (persona) {
+            AiPersona.ANALYST -> "Analyst lens — facts and trade-offs:"
+            AiPersona.CODER -> "Coder lens — practical steps:"
+            AiPersona.COACH -> "Coach lens — next actions:"
+            AiPersona.CREATIVE -> "Creative lens — fresh angles:"
+            else -> "${persona.label}:"
+        }
+        val tip = when (persona) {
+            AiPersona.ANALYST -> "\nNext: list constraints, then pick one option."
+            AiPersona.CODER -> "\nNext: one concrete step you can try now."
+            AiPersona.COACH -> "\nYou have this — take the smallest useful step."
+            AiPersona.CREATIVE -> "\nTwist: what if you flipped the usual approach?"
+            else -> ""
+        }
+        return "$prefix\n$body$tip"
     }
 
     companion object {

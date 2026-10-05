@@ -41,45 +41,26 @@ import com.cat.ui.theme.NeonMagenta
 
 @Composable
 fun SettingsScreen(
-    features: List<FeatureToggle>,
+    features: List<FeatureToggle> = emptyList(),
     wide: Boolean,
-    onToggle: (Int) -> Unit
+    onToggle: (Int) -> Unit = {},
+    onOpenTools: (() -> Unit)? = null
 ) {
-    if (wide) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                CopilotSettings()
-                FilterDemo()
-            }
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                ToggleList(features, onToggle)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(top = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        CopilotSettings()
+        if (onOpenTools != null) {
+            OutlinedButton(onClick = onOpenTools) {
+                Text("More tools (/call · /sms · notes)", color = NeonCyan)
             }
         }
-    } else {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(top = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            CopilotSettings()
-            FilterDemo()
+        FilterDemo()
+        if (features.isNotEmpty()) {
             ToggleList(features, onToggle)
         }
     }

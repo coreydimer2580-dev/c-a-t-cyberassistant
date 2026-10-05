@@ -111,52 +111,23 @@ fun MemoryScreen(stacks: List<MemoryStack>, wide: Boolean) {
         Unit
     }
 
-    if (wide) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            NotesPane(
-                modifier = Modifier.weight(1.3f),
-                notes = notes,
-                storage = storage,
-                flashId = flashId,
-                draft = draft,
-                tag = tag,
-                status = status,
-                onDraft = { draft = it },
-                onTag = { tag = it },
-                onAdd = onAdd,
-                onClear = onClear,
-                onRetag = onRetag
-            )
-            StackPane(stacks, Modifier.weight(1f))
-        }
-    } else {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = 12.dp)
-        ) {
-            NotesPane(
-                modifier = Modifier.weight(1.4f),
-                notes = notes,
-                storage = storage,
-                flashId = flashId,
-                draft = draft,
-                tag = tag,
-                status = status,
-                onDraft = { draft = it },
-                onTag = { tag = it },
-                onAdd = onAdd,
-                onClear = onClear,
-                onRetag = onRetag
-            )
-            StackPane(stacks, Modifier.weight(0.9f).padding(top = 8.dp))
-        }
-    }
+    // AI memory only — theater stacks demoted unless explicitly provided.
+    NotesPane(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(top = 12.dp),
+        notes = notes,
+        storage = storage,
+        flashId = flashId,
+        draft = draft,
+        tag = tag,
+        status = status,
+        onDraft = { draft = it },
+        onTag = { tag = it },
+        onAdd = onAdd,
+        onClear = onClear,
+        onRetag = onRetag
+    )
 }
 
 @Composable

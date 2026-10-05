@@ -9,5 +9,7 @@ data class ChatMessage(
     val role: String,
     val content: String,
     val createdAt: Long,
-    val filtered: Boolean
+    val filtered: Boolean,
+    /** AiPersona.id for assistant turns; empty for user or legacy rows. */
+    val personaId: String = ""
 )

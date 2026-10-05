@@ -24,7 +24,6 @@ import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -38,10 +37,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.cat.model.FeatureToggle
-import com.cat.model.MemoryStack
-import com.cat.model.VoiceProfile
-import com.cat.model.WorldState
 import com.cat.ui.theme.CATTheme
 import com.cat.ui.theme.CatWordmark
 import com.cat.ui.theme.NeonCyan
@@ -51,12 +46,10 @@ import com.cat.ui.theme.Panel
 import com.cat.ui.theme.neonCard
 
 private object Routes {
-    const val DASHBOARD = "dashboard"
-    const val MEMORY = "memory"
-    const val VOICE = "voice"
-    const val WORLD = "world"
-    const val SETTINGS = "settings"
     const val CHAT = "chat"
+    const val WHEEL = "wheel"
+    const val MEMORY = "memory"
+    const val SETTINGS = "settings"
     const val TOOLS = "tools"
 }
 
@@ -70,77 +63,32 @@ fun CAtApp() {
         false
     }
 
-    val tabs = listOf("Dashboard", "Memory", "Tools", "Voice", "World", "Settings")
-    val routes = listOf(
-        Routes.DASHBOARD,
-        Routes.MEMORY,
-        Routes.TOOLS,
-        Routes.VOICE,
-        Routes.WORLD,
-        Routes.SETTINGS
-    )
+    val tabs = listOf("Chat", "Wheel", "Memory", "Settings")
+    val routes = listOf(Routes.CHAT, Routes.WHEEL, Routes.MEMORY, Routes.SETTINGS)
     var selectedTab by remember { mutableIntStateOf(0) }
-    var dashEpoch by remember { mutableIntStateOf(0) }
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
-    val onChat = backStack?.destination?.route == Routes.CHAT
-
-    val features = remember {
-        mutableStateListOf(
-            FeatureToggle("Offline notes", true),
-            FeatureToggle("Voice profiles", true),
-            FeatureToggle("Memory stacks", true),
-            FeatureToggle("Private mode", true),
-            FeatureToggle("Holographic UI", true),
-            FeatureToggle("World simulator", true),
-            FeatureToggle("Satellite view", false),
-            FeatureToggle("Game world", false),
-            FeatureToggle("Emulator", false),
-            FeatureToggle("Backend sync", false)
-        )
-    }
-
-    val stacks = remember {
-        listOf(
-            MemoryStack("Core Stack", 82, true),
-            MemoryStack("Voice Stack", 60, true),
-            MemoryStack("Safety Stack", 74, true),
-            MemoryStack("World Stack", 55, true),
-            MemoryStack("Simulation Stack", 44, true),
-            MemoryStack("Knowledge Stack", 68, true),
-            MemoryStack("Scenes Stack", 52, true),
-            MemoryStack("Progress Stack", 61, true)
-        )
-    }
-
-    val voices = remember {
-        listOf(
-            VoiceProfile("Nova", "Warm", 87, true),
-            VoiceProfile("Cipher", "Neutral", 92, false),
-            VoiceProfile("Echo", "Calm", 78, false)
-        )
-    }
-
-    val worlds = remember {
-        listOf(
-            WorldState("London Echo", 72, "Simulation"),
-            WorldState("Grid Pulse", 61, "Predictive"),
-            WorldState("Holo Drift", 48, "Creative")
-        )
-    }
+    val route = backStack?.destination?.route ?: Routes.CHAT
+    val onTools = route == Routes.TOOLS
 
     fun openTab(index: Int) {
-        if (index == 0) dashEpoch += 1
         selectedTab = index
         navController.navigate(routes[index]) {
-            popUpTo(Routes.DASHBOARD) { saveState = true }
+            popUpTo(Routes.CHAT) { saveState = true }
             launchSingleTop = true
             restoreState = true
         }
     }
 
-    fun openChat() {
-        navController.navigate(Routes.CHAT) { launchSingleTop = true }
+    androidx.compose.runtime.LaunchedEffect(route) {
+        val tabIndex = when (route) {
+            Routes.CHAT -> 0
+            Routes.WHEEL -> 1
+            Routes.MEMORY -> 2
+            Routes.SETTINGS, Routes.TOOLS -> 3
+            else -> selectedTab
+        }
+        if (tabIndex != selectedTab) selectedTab = tabIndex
     }
 
     CATTheme {
@@ -155,9 +103,7 @@ fun CAtApp() {
                     NeonSidebar(
                         tabs = tabs,
                         selectedTab = selectedTab,
-                        onChat = onChat,
-                        onSelect = { openTab(it) },
-                        onChatClick = { openChat() }
+                        onSelect = { openTab(it) }
                     )
                     Column(
                         modifier = Modifier
@@ -166,22 +112,12 @@ fun CAtApp() {
                     ) {
                         AppNav(
                             navController = navController,
-                            features = features,
-                            stacks = stacks,
-                            voices = voices,
-                            worlds = worlds,
                             wide = true,
-                            dashEpoch = dashEpoch,
-                            onOpenTab = { openTab(it) },
-                            onLaunch = { openChat() },
-                            onToggle = { index ->
-                                val current = features[index]
-                                features[index] = current.copy(enabled = !current.enabled)
+                            onOpenWheel = { openTab(1) },
+                            onOpenTools = {
+                                navController.navigate(Routes.TOOLS) { launchSingleTop = true }
                             },
-                            onChatBack = {
-                                dashEpoch += 1
-                                navController.popBackStack()
-                            }
+                            onToolsBack = { openTab(3) }
                         )
                     }
                 }
@@ -191,15 +127,17 @@ fun CAtApp() {
                         .fillMaxSize()
                         .padding(12.dp)
                 ) {
-                    if (!onChat) {
-                        CatWordmark(size = 52.sp)
-                        Text(
-                            "v1.5 · AU offline",
-                            color = NeonLime,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Black,
-                            modifier = Modifier.padding(bottom = 6.dp)
-                        )
+                    if (!onTools) {
+                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            CatWordmark(size = 40.sp)
+                            Text(
+                                "v1.6 · AI",
+                                color = NeonLime,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Black,
+                                modifier = Modifier.padding(start = 10.dp)
+                            )
+                        }
                         ScrollableTabRow(
                             selectedTabIndex = selectedTab,
                             containerColor = Panel,
@@ -232,22 +170,12 @@ fun CAtApp() {
                     }
                     AppNav(
                         navController = navController,
-                        features = features,
-                        stacks = stacks,
-                        voices = voices,
-                        worlds = worlds,
                         wide = false,
-                        dashEpoch = dashEpoch,
-                        onOpenTab = { openTab(it) },
-                        onLaunch = { openChat() },
-                        onToggle = { index ->
-                            val current = features[index]
-                            features[index] = current.copy(enabled = !current.enabled)
+                        onOpenWheel = { openTab(1) },
+                        onOpenTools = {
+                            navController.navigate(Routes.TOOLS) { launchSingleTop = true }
                         },
-                        onChatBack = {
-                            dashEpoch += 1
-                            navController.popBackStack()
-                        }
+                        onToolsBack = { openTab(3) }
                     )
                 }
             }
@@ -259,9 +187,7 @@ fun CAtApp() {
 private fun NeonSidebar(
     tabs: List<String>,
     selectedTab: Int,
-    onChat: Boolean,
-    onSelect: (Int) -> Unit,
-    onChatClick: () -> Unit
+    onSelect: (Int) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -271,22 +197,20 @@ private fun NeonSidebar(
             .padding(14.dp)
     ) {
         CatWordmark(size = 40.sp)
-        Text("v1.5 · AU offline", color = NeonLime, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        Text("No network scan", color = NeonMagenta, fontSize = 11.sp, modifier = Modifier.padding(bottom = 16.dp))
+        Text("v1.6 · AI first", color = NeonLime, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Text("Chat · Wheel · Memory", color = NeonMagenta, fontSize = 11.sp, modifier = Modifier.padding(bottom = 16.dp))
         tabs.forEachIndexed { index, title ->
             SideItem(
                 label = title,
-                selected = !onChat && selectedTab == index,
-                accent = NeonCyan,
+                selected = selectedTab == index,
+                accent = when (index) {
+                    0 -> NeonCyan
+                    1 -> NeonMagenta
+                    else -> NeonLime
+                },
                 onClick = { onSelect(index) }
             )
         }
-        SideItem(
-            label = "Chat",
-            selected = onChat,
-            accent = NeonMagenta,
-            onClick = onChatClick
-        )
     }
 }
 
@@ -311,48 +235,47 @@ private fun SideItem(label: String, selected: Boolean, accent: Color, onClick: (
 @Composable
 private fun ColumnScope.AppNav(
     navController: androidx.navigation.NavHostController,
-    features: List<FeatureToggle>,
-    stacks: List<MemoryStack>,
-    voices: List<VoiceProfile>,
-    worlds: List<WorldState>,
     wide: Boolean,
-    dashEpoch: Int,
-    onOpenTab: (Int) -> Unit,
-    onLaunch: () -> Unit,
-    onToggle: (Int) -> Unit,
-    onChatBack: () -> Unit
+    onOpenWheel: () -> Unit,
+    onOpenTools: () -> Unit,
+    onToolsBack: () -> Unit
 ) {
     NavHost(
         navController = navController,
-        startDestination = Routes.DASHBOARD,
+        startDestination = Routes.CHAT,
         modifier = Modifier
             .fillMaxWidth()
             .weight(1f)
     ) {
-        composable(Routes.DASHBOARD) {
-            DashboardScreen(
-                features = features,
-                worlds = worlds,
-                wide = wide,
-                refreshKey = dashEpoch,
-                onLaunch = onLaunch,
-                onOpenMemory = { onOpenTab(1) },
-                onOpenTools = { onOpenTab(2) }
-            )
+        composable(Routes.CHAT) {
+            ChatScreen(wide = wide, onOpenWheel = onOpenWheel)
         }
-        composable(Routes.MEMORY) { MemoryScreen(stacks, wide) }
-        composable(Routes.TOOLS) { ToolsScreen(wide) }
-        composable(Routes.VOICE) { VoiceScreen(voices) }
-        composable(Routes.WORLD) { WorldScreen(worlds) }
+        composable(Routes.WHEEL) {
+            WheelScreen(wide = wide)
+        }
+        composable(Routes.MEMORY) {
+            MemoryScreen(stacks = emptyList(), wide = wide)
+        }
         composable(Routes.SETTINGS) {
             SettingsScreen(
-                features = features,
+                features = emptyList(),
                 wide = wide,
-                onToggle = onToggle
+                onToggle = {},
+                onOpenTools = onOpenTools
             )
         }
-        composable(Routes.CHAT) {
-            ChatScreen(wide = wide, onBack = onChatBack)
+        composable(Routes.TOOLS) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Text(
+                    "← Settings",
+                    color = NeonMagenta,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clickable(onClick = onToolsBack)
+                        .padding(bottom = 8.dp)
+                )
+                ToolsScreen(wide)
+            }
         }
     }
 }

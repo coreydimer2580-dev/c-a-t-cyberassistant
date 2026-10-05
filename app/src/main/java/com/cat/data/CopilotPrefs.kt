@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.cat.ai.AiPersona
 import com.cat.ai.CopilotMode
 
 class CopilotPrefs(context: Context) {
@@ -25,6 +26,19 @@ class CopilotPrefs(context: Context) {
         get() = CopilotMode.fromStorage(prefs.getString(KEY_MODE, CopilotMode.OFFLINE.storage))
         set(value) {
             prefs.edit().putString(KEY_MODE, value.storage).apply()
+        }
+
+    var persona: AiPersona
+        get() = AiPersona.fromId(prefs.getString(KEY_PERSONA, AiPersona.OFFLINE_CAT.id))
+        set(value) {
+            prefs.edit().putString(KEY_PERSONA, value.id).apply()
+            value.linkedMode?.let { mode = it }
+        }
+
+    var groupSolver: Boolean
+        get() = prefs.getBoolean(KEY_GROUP, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_GROUP, value).apply()
         }
 
     var baseUrl: String
@@ -81,6 +95,8 @@ class CopilotPrefs(context: Context) {
         const val DEFAULT_MODEL = "llama3.2"
         const val EMULATOR_OLLAMA_URL = "http://10.0.2.2:11434/v1"
         private const val KEY_MODE = "mode"
+        private const val KEY_PERSONA = "persona"
+        private const val KEY_GROUP = "group_solver"
         private const val KEY_URL = "base_url"
         private const val KEY_API = "api_key"
         private const val KEY_MODEL = "model"
