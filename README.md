@@ -2,7 +2,7 @@
 
 Version 1.7 — Autopilot + evolving memory. Kotlin, Jetpack Compose, Room. Neon cyan, magenta, and lime on black.
 
-Opens on **Chat** (ChatGPT-style). Primary tabs: **Chat · Wheel · Memory · Settings**.
+Opens on **Chat** as a **C@T terminal** (`C@T>` / `you>` / persona prompts, monospace). Primary tabs: **Chat · Wheel · Memory · Settings**.
 
 ## AI product
 

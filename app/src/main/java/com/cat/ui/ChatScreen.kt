@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -217,7 +218,7 @@ fun ChatScreen(wide: Boolean, onOpenWheel: (() -> Unit)? = null) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     CatWordmark(size = 36.sp)
-                    Text("AI chat", color = NeonLime, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text("C@T terminal", color = NeonLime, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     TextButton(onClick = {
                         busy = true
                         speech.stop()
@@ -243,19 +244,34 @@ fun ChatScreen(wide: Boolean, onOpenWheel: (() -> Unit)? = null) {
                     )
                 }
 
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxWidth().weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .neonCard(accent = NeonLime, shape = RoundedCornerShape(12.dp), fill = Color(0xFF050805), glow = 10.dp)
+                        .padding(10.dp)
                 ) {
-                    if (messages.isEmpty() && !busy) {
-                        item { EmptyChatHint(persona, group, autopilot) }
-                    }
-                    items(messages, key = { it.id }) { message ->
-                        Bubble(message, stream = message.id == streamId && message.role == "assistant")
-                    }
-                    if (busy) {
-                        item { ThinkingBubble(if (group) "Group" else persona.shortLabel) }
+                    Text(
+                        "C@T terminal · offline-first · Fold ready",
+                        color = NeonLime,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (messages.isEmpty() && !busy) {
+                            item { EmptyChatHint(persona, group, autopilot) }
+                        }
+                        items(messages, key = { it.id }) { message ->
+                            TerminalLine(message, stream = message.id == streamId && message.role == "assistant")
+                        }
+                        if (busy) {
+                            item { ThinkingBubble(if (group) "Group" else persona.shortLabel) }
+                        }
                     }
                 }
 
@@ -444,28 +460,18 @@ private fun StatusChip(
 
 @Composable
 private fun EmptyChatHint(persona: AiPersona, group: Boolean, autopilot: Boolean) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .neonCard(accent = NeonLime, shape = RoundedCornerShape(18.dp), fill = Color(0xFF0A1008), glow = 14.dp)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text("Ask anything", color = NeonLime, fontWeight = FontWeight.Black, fontSize = 22.sp)
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("C@T> boot — Australia/Perth · en-AU", color = NeonLime, fontFamily = FontFamily.Monospace, fontSize = 13.sp)
         Text(
-            when {
-                group -> "Group solver spins Analyst, Coder, and Coach, then merges a verdict."
-                autopilot -> "Autopilot speaks replies and one follow-up, then waits for you."
-                else -> "${persona.label} answers here. Offline works without Wi‑Fi."
-            },
-            color = Mist
+            "C@T> session ready · ${persona.shortLabel}" +
+                (if (group) " · group" else "") +
+                (if (autopilot) " · autopilot" else ""),
+            color = Mist,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 12.sp
         )
-        Text(
-            "Evolve learns from this chat. Online evolve (optional) uses public Wikipedia — never browser history.",
-            color = Paper,
-            fontSize = 13.sp
-        )
-        Text("Try: plan my day · /remember tea is at 4 · explain this simply", color = NeonCyan, fontSize = 13.sp)
+        Text("C@T> type below. Offline works. Evolve learns from this chat.", color = Paper, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+        Text("C@T> try: /help · /remember tea is at 4 · plan my day", color = NeonCyan, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
     }
 }
 
@@ -511,28 +517,41 @@ private fun LiveMemoryRail(memories: List<MemoryEntity>) {
 
 @Composable
 private fun Composer(draft: String, enabled: Boolean, onDraft: (String) -> Unit, onSend: () -> Unit) {
-    val shape = RoundedCornerShape(28.dp)
+    val shape = RoundedCornerShape(10.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .neonCard(accent = NeonCyan, shape = shape, fill = Color(0xFF050508), glow = 18.dp)
-            .padding(horizontal = 6.dp, vertical = 4.dp),
+            .neonCard(accent = NeonCyan, shape = shape, fill = Color(0xFF050805), glow = 12.dp)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        Text(
+            "C@T>",
+            color = NeonLime,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp,
+            modifier = Modifier.padding(end = 8.dp)
+        )
         BasicTextField(
             value = draft,
             onValueChange = onDraft,
             enabled = enabled,
-            textStyle = TextStyle(color = Paper, fontSize = 16.sp, fontWeight = FontWeight.Medium),
-            cursorBrush = SolidColor(NeonCyan),
+            textStyle = TextStyle(
+                color = Paper,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                fontFamily = FontFamily.Monospace
+            ),
+            cursorBrush = SolidColor(NeonLime),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
             keyboardActions = KeyboardActions(onSend = { onSend() }),
             maxLines = 5,
-            modifier = Modifier.weight(1f).padding(horizontal = 12.dp, vertical = 12.dp),
+            modifier = Modifier.weight(1f).padding(vertical = 10.dp),
             decorationBox = { inner ->
                 Box {
                     if (draft.isEmpty()) {
-                        Text("Message C@T…", color = Color(0xFF6A8A96))
+                        Text("message…", color = Color(0xFF4A6A56), fontFamily = FontFamily.Monospace)
                     }
                     inner()
                 }
@@ -540,20 +559,21 @@ private fun Composer(draft: String, enabled: Boolean, onDraft: (String) -> Unit,
         )
         TextButton(onClick = onSend, enabled = enabled && draft.isNotBlank()) {
             Text(
-                "Send",
+                "run",
                 color = Color.Black,
                 fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.Monospace,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(if (enabled && draft.isNotBlank()) NeonCyan else Color(0xFF1C3036))
-                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (enabled && draft.isNotBlank()) NeonLime else Color(0xFF1C3036))
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
             )
         }
     }
 }
 
 @Composable
-private fun Bubble(message: ChatMessage, stream: Boolean) {
+private fun TerminalLine(message: ChatMessage, stream: Boolean) {
     val fromUser = message.role == "user"
     val full = message.content
     var shown by remember(message.id) { mutableStateOf(if (stream) "" else full) }
@@ -571,49 +591,37 @@ private fun Bubble(message: ChatMessage, stream: Boolean) {
         }
     }
     val live = stream && shown.length < full.length
-    val shape = if (fromUser) {
-        RoundedCornerShape(topStart = 22.dp, topEnd = 6.dp, bottomEnd = 22.dp, bottomStart = 22.dp)
-    } else {
-        RoundedCornerShape(topStart = 6.dp, topEnd = 22.dp, bottomEnd = 22.dp, bottomStart = 22.dp)
+    val prefix = when {
+        fromUser -> "you>"
+        message.personaId == "group" -> "group>"
+        message.personaId.isNotBlank() -> AiPersona.fromId(message.personaId).shortLabel.lowercase() + ">"
+        else -> "cat>"
     }
-    val accent = if (fromUser) NeonCyan else NeonLime
-    val label = when {
-        fromUser -> "YOU"
-        message.personaId == "group" -> "GROUP"
-        message.personaId.isNotBlank() -> AiPersona.fromId(message.personaId).shortLabel.uppercase()
-        else -> "C@T"
+    val accent = when {
+        fromUser -> NeonCyan
+        message.personaId == "group" -> NeonMagenta
+        else -> NeonLime
     }
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (fromUser) Arrangement.End else Arrangement.Start
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth(0.92f)
-                .neonCard(
-                    accent = accent,
-                    shape = shape,
-                    fill = if (fromUser) Color(0xFF042028) else Color(0xFF101808),
-                    glow = 12.dp
-                )
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row {
             Text(
-                text = label,
+                text = prefix,
                 color = accent,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 1.2.sp
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(end = 8.dp)
             )
             Text(
-                text = if (live) "$shown▍" else shown,
+                text = if (live) "$shown█" else shown,
                 color = Paper,
-                fontWeight = FontWeight.Medium
+                fontFamily = FontFamily.Monospace,
+                fontSize = 13.sp,
+                modifier = Modifier.weight(1f)
             )
-            if (message.filtered) {
-                Text("redacted before save", color = NeonMagenta, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            }
+        }
+        if (message.filtered) {
+            Text("  # redacted before save", color = NeonMagenta, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
         }
     }
 }
@@ -628,17 +636,11 @@ private fun ThinkingBubble(who: String) {
         label = "think-alpha"
     )
     Text(
-        text = "$who  ● ● ●",
+        text = "${who.lowercase()}> ● ● ●",
         color = NeonCyan.copy(alpha = alpha),
-        fontWeight = FontWeight.Black,
-        modifier = Modifier
-            .neonCard(
-                accent = NeonLime,
-                shape = RoundedCornerShape(topStart = 6.dp, topEnd = 22.dp, bottomEnd = 22.dp, bottomStart = 22.dp),
-                fill = Color(0xFF101808),
-                glow = 12.dp
-            )
-            .padding(horizontal = 14.dp, vertical = 10.dp)
+        fontFamily = FontFamily.Monospace,
+        fontWeight = FontWeight.Bold,
+        fontSize = 13.sp
     )
 }
 
