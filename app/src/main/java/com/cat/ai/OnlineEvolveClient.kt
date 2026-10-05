@@ -64,7 +64,7 @@ class OnlineEvolveClient {
             connectTimeout = 3_500
             readTimeout = 5_000
             setRequestProperty("Accept", "application/json")
-            setRequestProperty("User-Agent", "C@T-CyberAssistant/1.8 (offline-first; public-lookup)")
+            setRequestProperty("User-Agent", "C@T-CyberAssistant/1.8.1 (offline-first; public-lookup)")
         }
         return try {
             val code = connection.responseCode

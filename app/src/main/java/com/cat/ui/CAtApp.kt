@@ -64,18 +64,18 @@ fun CAtApp() {
         false
     }
 
-    val tabs = listOf("Chat", "Terminal", "Wheel", "Memory", "Settings")
-    val routes = listOf(Routes.CHAT, Routes.TERMINAL, Routes.WHEEL, Routes.MEMORY, Routes.SETTINGS)
+    val tabs = listOf("Terminal", "Chat", "Wheel", "Memory", "Settings")
+    val routes = listOf(Routes.TERMINAL, Routes.CHAT, Routes.WHEEL, Routes.MEMORY, Routes.SETTINGS)
     var selectedTab by remember { mutableIntStateOf(0) }
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
-    val route = backStack?.destination?.route ?: Routes.CHAT
+    val route = backStack?.destination?.route ?: Routes.TERMINAL
     val onTools = route == Routes.TOOLS
 
     fun openTab(index: Int) {
         selectedTab = index
         navController.navigate(routes[index]) {
-            popUpTo(Routes.CHAT) { saveState = true }
+            popUpTo(Routes.TERMINAL) { saveState = true }
             launchSingleTop = true
             restoreState = true
         }
@@ -83,8 +83,8 @@ fun CAtApp() {
 
     androidx.compose.runtime.LaunchedEffect(route) {
         val tabIndex = when (route) {
-            Routes.CHAT -> 0
-            Routes.TERMINAL -> 1
+            Routes.TERMINAL -> 0
+            Routes.CHAT -> 1
             Routes.WHEEL -> 2
             Routes.MEMORY -> 3
             Routes.SETTINGS, Routes.TOOLS -> 4
@@ -133,7 +133,7 @@ fun CAtApp() {
                         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                             CatWordmark(size = 40.sp)
                             Text(
-                                "v1.8 · Locked terminal",
+                                "v1.8.1 · Terminal home",
                                 color = NeonLime,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Black,
@@ -199,15 +199,15 @@ private fun NeonSidebar(
             .padding(14.dp)
     ) {
         CatWordmark(size = 40.sp)
-        Text("v1.8 · Locked terminal", color = NeonLime, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        Text("Terminal · Wheel · Memory", color = NeonMagenta, fontSize = 11.sp, modifier = Modifier.padding(bottom = 16.dp))
+        Text("v1.8.1 · Terminal home", color = NeonLime, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Text("Terminal home · Chat · Wheel", color = NeonMagenta, fontSize = 11.sp, modifier = Modifier.padding(bottom = 16.dp))
         tabs.forEachIndexed { index, title ->
             SideItem(
                 label = title,
                 selected = selectedTab == index,
                 accent = when (index) {
-                    0 -> NeonCyan
-                    1 -> NeonLime
+                    0 -> NeonLime
+                    1 -> NeonCyan
                     2 -> NeonMagenta
                     else -> NeonLime
                 },
@@ -245,17 +245,17 @@ private fun ColumnScope.AppNav(
 ) {
     NavHost(
         navController = navController,
-        startDestination = Routes.CHAT,
+        startDestination = Routes.TERMINAL,
         modifier = Modifier
             .fillMaxWidth()
             .weight(1f)
     ) {
-        composable(Routes.CHAT) {
-            ChatScreen(wide = wide, onOpenWheel = onOpenWheel)
-        }
         composable(Routes.TERMINAL) {
             val app = androidx.compose.ui.platform.LocalContext.current.applicationContext as com.cat.CAtApplication
             TerminalScreen(app)
+        }
+        composable(Routes.CHAT) {
+            ChatScreen(wide = wide, onOpenWheel = onOpenWheel)
         }
         composable(Routes.WHEEL) {
             WheelScreen(wide = wide)

@@ -1,8 +1,8 @@
 # C@T - Cyber AI Assistant
 
-Version 1.8 — locked Terminal, apart from Chat. Kotlin, Jetpack Compose, Room. Neon cyan, magenta, and lime on black.
+Version 1.8.1 — locked Terminal as home, apart from Chat. Kotlin, Jetpack Compose, Room. Neon cyan, magenta, and lime on black.
 
-Opens on **Chat**. Primary tabs: **Chat · Terminal · Wheel · Memory · Settings**.
+Opens on **Terminal**. Primary tabs: **Terminal · Chat · Wheel · Memory · Settings**.
 
 ## Terminal
 
