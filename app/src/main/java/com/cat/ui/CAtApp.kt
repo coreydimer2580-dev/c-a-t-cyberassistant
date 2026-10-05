@@ -133,7 +133,7 @@ fun CAtApp() {
                         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                             CatWordmark(size = 40.sp)
                             Text(
-                                "v1.8.1 · Terminal home",
+                                "v1.11 · English Terminal",
                                 color = NeonLime,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Black,
@@ -199,7 +199,7 @@ private fun NeonSidebar(
             .padding(14.dp)
     ) {
         CatWordmark(size = 40.sp)
-        Text("v1.8.1 · Terminal home", color = NeonLime, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Text("v1.11 · English Terminal", color = NeonLime, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         Text("Terminal home · Chat · Wheel", color = NeonMagenta, fontSize = 11.sp, modifier = Modifier.padding(bottom = 16.dp))
         tabs.forEachIndexed { index, title ->
             SideItem(
@@ -252,7 +252,7 @@ private fun ColumnScope.AppNav(
     ) {
         composable(Routes.TERMINAL) {
             val app = androidx.compose.ui.platform.LocalContext.current.applicationContext as com.cat.CAtApplication
-            TerminalScreen(app)
+            TerminalScreen(app, wide = wide)
         }
         composable(Routes.CHAT) {
             ChatScreen(wide = wide, onOpenWheel = onOpenWheel)

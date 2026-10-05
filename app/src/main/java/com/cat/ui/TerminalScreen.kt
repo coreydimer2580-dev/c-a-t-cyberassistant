@@ -3,13 +3,16 @@ package com.cat.ui
 import android.app.Activity
 import android.view.WindowManager
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -17,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -53,8 +57,15 @@ import kotlinx.coroutines.launch
 
 private val commandChips = listOf("/help", "/recall", "/status")
 
+private val welcomeExamples = listOf(
+    "help" to "what can you do",
+    "remember tea is at 4" to "save a note",
+    "where is tea" to "use memory",
+    "status" to "version and lock"
+)
+
 @Composable
-fun TerminalScreen(app: CAtApplication) {
+fun TerminalScreen(app: CAtApplication, wide: Boolean = false) {
     var unlocked by remember { mutableStateOf(app.terminalLock.unlocked) }
     var privateOn by remember { mutableStateOf(app.prefs.terminalPrivate) }
     PrivateRecents(privateOn)
@@ -64,7 +75,7 @@ fun TerminalScreen(app: CAtApplication) {
             app.prefs.terminalPrivate = it
         }) { unlocked = true }
     } else {
-        TerminalConsole(app, privateOn, onPrivate = {
+        TerminalConsole(app, privateOn, wide, onPrivate = {
             privateOn = it
             app.prefs.terminalPrivate = it
         }) { unlocked = false }
@@ -139,13 +150,10 @@ private fun TerminalLockGate(
             }),
             singleLine = true
         )
-        Button(
-            onClick = {
-                message = submitPin(app, pin, onUnlocked)
-                if (!app.terminalLock.unlocked) pin = ""
-            },
-            enabled = wait == 0
-        ) { Text("Unlock") }
+        PressButton(onClick = {
+            message = submitPin(app, pin, onUnlocked)
+            if (!app.terminalLock.unlocked) pin = ""
+        }, enabled = wait == 0) { Text("Unlock") }
         PrivateSwitch(privateOn, onPrivate)
         Text(message, color = NeonMagenta, fontFamily = FontFamily.Monospace)
     }
@@ -167,6 +175,45 @@ private fun PrivateSwitch(privateOn: Boolean, onPrivate: (Boolean) -> Unit) {
     }
 }
 
+@Composable
+private fun PrivateBadge() {
+    Box(
+        modifier = Modifier
+            .border(1.5.dp, NeonMagenta, RoundedCornerShape(4.dp))
+            .background(NeonMagenta.copy(alpha = 0.22f), RoundedCornerShape(4.dp))
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+    ) {
+        Text(
+            "PRIVATE",
+            color = NeonMagenta,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Black,
+            fontSize = 16.sp,
+            letterSpacing = 2.sp
+        )
+    }
+}
+
+@Composable
+private fun PressButton(
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = NeonCyan,
+            contentColor = Color.Black,
+            disabledContainerColor = Color(0xFF1A3336),
+            disabledContentColor = Color(0xFF6A8A96)
+        )
+    ) { content() }
+}
+
 private fun submitPin(app: CAtApplication, pin: String, onUnlocked: () -> Unit): String {
     return when (val result = app.terminalLock.tryUnlock(pin)) {
         TerminalLock.Unlock.Ok -> {
@@ -183,11 +230,12 @@ private fun welcomeLines(): List<TerminalLine> {
     val now = System.currentTimeMillis()
     val text = """
         C@T ${BuildConfig.VERSION_NAME} · English Terminal · not a shell · build ${BuildConfig.VERSION_CODE}
-        Commands: help, remember <fact>, recall, time, status, version, clear, unlock
+        Tap an example chip, or type help, remember <fact>, recall, time, status, version.
+        clear asks first. /clear yes wipes this vault only. Chat stays.
         Voice defaults to Analyst. Typos on those commands are repaired.
-        Each reply uses saved memories plus this encrypted vault.
+        Replies rank saved memories that share your words and say how many were used.
         Algorithm rail traces INPUT, CORRECT, MEMORY, then REPLY. PRIVATE lights when Private is on. Trace only — this app does not rewrite itself.
-        Private ON stays offline, skips cloud, and hides this screen in recents.
+        Private ON stays offline, blocks cloud, and hides this screen in recents.
         Chat stays a separate tab. PIN lock stays on this transcript.
     """.trimIndent()
     return listOf(TerminalLine("sys", text, now))
@@ -197,6 +245,7 @@ private fun welcomeLines(): List<TerminalLine> {
 private fun TerminalConsole(
     app: CAtApplication,
     privateOn: Boolean,
+    wide: Boolean,
     onPrivate: (Boolean) -> Unit,
     onLock: () -> Unit
 ) {
@@ -210,13 +259,14 @@ private fun TerminalConsole(
     var railSteps by remember { mutableStateOf(algorithmSteps(privateOn)) }
     var railActive by remember { mutableStateOf(-1) }
     var stepLabel by remember { mutableStateOf<String?>(null) }
+    var confirmClear by remember { mutableStateOf(false) }
 
     suspend fun refreshFace() {
         val snap = runCatching { app.copilot.terminalFace() }.getOrNull()
         face = if (snap == null) {
             "v${BuildConfig.VERSION_NAME}"
         } else if (snap.privateMode) {
-            "private · offline · v${BuildConfig.VERSION_NAME} · memories ${snap.memoryCount} · ${snap.voice}"
+            "private · offline · cloud blocked · v${BuildConfig.VERSION_NAME} · memories ${snap.memoryCount} · ${snap.voice}"
         } else {
             val net = if (snap.online) "online" else "offline"
             "$net · v${BuildConfig.VERSION_NAME} · memories ${snap.memoryCount} · ${snap.voice}"
@@ -242,8 +292,7 @@ private fun TerminalConsole(
     fun send(rawOverride: String? = null) {
         val raw = rawOverride ?: draft
         if (busy || raw.isBlank()) return
-        if (rawOverride == null) draft = ""
-        else draft = ""
+        draft = ""
         busy = true
         val steps = algorithmSteps(privateOn)
         railSteps = steps
@@ -251,7 +300,7 @@ private fun TerminalConsole(
             suspend fun light(name: String) {
                 railActive = steps.indexOf(name)
                 stepLabel = name
-                delay(170)
+                delay(120)
             }
             light("INPUT")
             val fixed = SoftCorrect.apply(raw)
@@ -288,76 +337,24 @@ private fun TerminalConsole(
             } else {
                 next + catLine
             }
+            confirmClear = !answer.clearVault &&
+                answer.reply.contains("/clear yes", ignoreCase = true)
             notice = answer.notice
             app.terminalVault.save(lines)
             refreshFace()
-            delay(640)
+            delay(480)
             stepLabel = null
             railActive = -1
             busy = false
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF050605))
-    ) {
-        AlgorithmScanBackdrop(Modifier.matchParentSize())
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                "C@T> v${BuildConfig.VERSION_NAME}",
-                color = NeonLime,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f)
-            )
-            OutlinedButton(onClick = {
-                app.terminalLock.lock()
-                onLock()
-            }) { Text("Lock", color = NeonMagenta) }
-        }
-        Text(
-            face,
-            color = if (privateOn) NeonMagenta else NeonCyan,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 12.sp
-        )
-        if (stepLabel != null) {
-            Text(
-                stepLabel!!,
-                color = NeonLime,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold,
-                fontSize = 12.sp
-            )
-        }
-        AlgorithmRail(
-            steps = if (busy) railSteps else algorithmSteps(privateOn),
-            active = railActive
-        )
-        Text(
-            "Encrypted apart from Chat. English commands. Analyst voice by default.",
-            color = Color(0xFF8FB8A0),
-            fontFamily = FontFamily.Monospace,
-            fontSize = 12.sp
-        )
-        PrivateSwitch(privateOn, onPrivate)
+    val transcript: @Composable (Modifier) -> Unit = { modifier ->
         LazyColumn(
             state = listState,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
+            modifier = modifier
                 .background(Color(0xFF0A120C), RoundedCornerShape(8.dp))
+                .border(1.dp, NeonCyan.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
                 .padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
@@ -385,8 +382,103 @@ private fun TerminalConsole(
                 }
             }
         }
+    }
+
+    val header: @Composable () -> Unit = {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                "C@T> v${BuildConfig.VERSION_NAME}",
+                color = NeonLime,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
+            if (privateOn) PrivateBadge()
+            OutlinedButton(onClick = {
+                app.terminalLock.lock()
+                onLock()
+            }) { Text("Lock", color = NeonMagenta) }
+        }
+        Text(
+            face,
+            color = if (privateOn) NeonMagenta else NeonCyan,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 12.sp
+        )
+        if (stepLabel != null) {
+            Text(
+                stepLabel!!,
+                color = NeonLime,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp
+            )
+        }
+        if (!wide) {
+            AlgorithmRail(
+                steps = if (busy) railSteps else algorithmSteps(privateOn),
+                active = railActive
+            )
+        }
+        Text(
+            "Encrypted apart from Chat. English commands. Analyst voice by default.",
+            color = Color(0xFFB8E0C8),
+            fontFamily = FontFamily.Monospace,
+            fontSize = 12.sp
+        )
+        PrivateSwitch(privateOn, onPrivate)
+    }
+
+    val composer: @Composable () -> Unit = {
         if (!notice.isNullOrBlank()) {
             Text(notice!!, color = NeonMagenta, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+        }
+        if (confirmClear) {
+            Text(
+                "Confirm: this wipes the Terminal vault only.",
+                color = NeonMagenta,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp
+            )
+            PressButton(onClick = { send("/clear yes") }, enabled = !busy) {
+                Text("Clear vault")
+            }
+        }
+        val onlyBanner = lines.size <= 1
+        if (onlyBanner) {
+            Text(
+                "Try an English example",
+                color = NeonCyan,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                welcomeExamples.take(2).forEach { (cmd, hint) ->
+                    OutlinedButton(
+                        onClick = { send(cmd) },
+                        enabled = !busy,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("$cmd · $hint", fontFamily = FontFamily.Monospace, fontSize = 10.sp, maxLines = 2)
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                welcomeExamples.drop(2).forEach { (cmd, hint) ->
+                    OutlinedButton(
+                        onClick = { send(cmd) },
+                        enabled = !busy,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("$cmd · $hint", fontFamily = FontFamily.Monospace, fontSize = 10.sp, maxLines = 2)
+                    }
+                }
+            }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             commandChips.forEach { chip ->
@@ -397,12 +489,18 @@ private fun TerminalConsole(
                 ) { Text(chip, fontFamily = FontFamily.Monospace, fontSize = 12.sp) }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (privateOn) {
+                Text("🔒", color = NeonMagenta, fontSize = 18.sp)
+            }
             OutlinedTextField(
                 value = draft,
                 onValueChange = { draft = it },
                 modifier = Modifier.weight(1f),
-                label = { Text("C@T>") },
+                label = { Text(if (privateOn) "C@T> 🔒 Private" else "C@T>") },
                 textStyle = androidx.compose.ui.text.TextStyle(
                     fontFamily = FontFamily.Monospace,
                     color = NeonLime
@@ -411,8 +509,50 @@ private fun TerminalConsole(
                 keyboardActions = KeyboardActions(onSend = { send() }),
                 singleLine = true
             )
-            Button(onClick = { send() }, enabled = !busy) { Text("Run") }
+            PressButton(onClick = { send() }, enabled = !busy) { Text("Run") }
         }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF050605))
+    ) {
+        AlgorithmScanBackdrop(Modifier.matchParentSize())
+        if (wide) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                AlgorithmRailVertical(
+                    steps = if (busy) railSteps else algorithmSteps(privateOn),
+                    active = railActive,
+                    modifier = Modifier
+                        .width(148.dp)
+                        .fillMaxHeight()
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    header()
+                    transcript(Modifier.weight(1f).fillMaxWidth())
+                    composer()
+                }
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                header()
+                transcript(Modifier.weight(1f).fillMaxWidth())
+                composer()
+            }
         }
     }
 }

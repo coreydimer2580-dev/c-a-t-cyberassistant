@@ -43,4 +43,12 @@ class SoftCorrectTest {
         assertFalse(SoftCorrect.apply("clean the kettle").changed)
         assertEquals("clean the kettle", SoftCorrect.apply("clean the kettle").text)
     }
+
+    @Test
+    fun extraCommandTyposStayFastAndLocal() {
+        assertEquals("status", SoftCorrect.apply("stauts").text)
+        assertEquals("/clear", SoftCorrect.apply("/clrrr").text)
+        assertEquals("unlock", SoftCorrect.apply("unlokk").text)
+        assertFalse(SoftCorrect.apply("the weather looks fine").changed)
+    }
 }

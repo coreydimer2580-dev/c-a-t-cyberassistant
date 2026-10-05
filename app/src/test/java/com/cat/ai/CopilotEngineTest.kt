@@ -215,11 +215,32 @@ class CopilotEngineTest {
     }
 
     @Test
-    fun terminalClearFlag() {
-        val outcome = engine.respondForTerminal("/clear", listOf("user" to "secret"), emptyList())
+    fun terminalClearAsksThenConfirms() {
+        val ask = engine.respondForTerminal("/clear", listOf("user" to "secret"), emptyList())
+        assertFalse(ask.clearVault)
+        assertTrue(ask.reply.contains("/clear yes"))
+        val outcome = engine.respondForTerminal("/clear yes", listOf("user" to "secret"), emptyList())
         assertTrue(outcome.clearVault)
         assertTrue(outcome.reply.contains("cleared"))
         assertFalse(outcome.reply.contains("secret"))
+    }
+
+    @Test
+    fun terminalUsedMemoryHintRanksRelevantNote() {
+        val outcome = engine.respondForTerminal(
+            "where is tea",
+            emptyList(),
+            listOf("the kettle is blue", "tea is at 4", "rain tomorrow"),
+            memoryTags = listOf("False", "True", "Unsure")
+        )
+        assertTrue(outcome.reply.contains("used "))
+        assertTrue(outcome.reply.contains("memories"))
+        val used = outcome.reply.substringAfter("used ").substringBefore(" memories")
+        assertTrue(used.toInt() >= 1)
+        val tea = outcome.reply.indexOf("tea is at 4")
+        val kettle = outcome.reply.indexOf("kettle")
+        assertTrue(tea >= 0)
+        if (kettle >= 0) assertTrue(tea < kettle)
     }
 
 }

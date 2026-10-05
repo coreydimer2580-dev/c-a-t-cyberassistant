@@ -387,8 +387,8 @@ class CopilotEngine(
         todos: List<String> = emptyList(),
         memoryTags: List<String> = emptyList(),
         persona: AiPersona = AiPersona.OFFLINE_CAT,
-        versionName: String = "1.10",
-        versionCode: Int = 15,
+        versionName: String = "1.11",
+        versionCode: Int = 16,
         online: Boolean = false,
         privateMode: Boolean = false
     ): TerminalOutcome {
@@ -406,7 +406,18 @@ class CopilotEngine(
         if (slash && cmd == "help" || lower == "help" || isHelp(lower)) {
             return pack(voice, TERMINAL_HELP, vaultLines, memories, memoryTags, query = clean)
         }
-        if (cmd == "clear" && (arg.isEmpty() || slash)) {
+        if (cmd == "clear" && (slash || arg.isEmpty())) {
+            val confirm = arg.lowercase() in CONFIRM_CLEAR
+            if (!confirm) {
+                return pack(
+                    voice,
+                    "Clear wipes this Terminal vault only. Chat stays. Type /clear yes to confirm. Not a shell.",
+                    vaultLines,
+                    memories,
+                    memoryTags,
+                    query = clean
+                )
+            }
             return pack(
                 voice,
                 "Transcript cleared. English Terminal stays ready. Chat is untouched. Not a shell.",
@@ -476,18 +487,22 @@ class CopilotEngine(
         tags: List<String>,
         query: String = ""
     ): String {
-        if (reply.contains("\n— memories:")) return reply
+        if (reply.contains("\n— memories:") || reply.contains("\n— used ")) return reply
+        val ranked = rankMemories(memories, tags, query)
+        val hits = ranked.filter { it.score > 0 }.take(6)
+        val shown = if (hits.isNotEmpty()) hits else ranked.take(3)
+        val usedHint = "used ${hits.size} memories"
         val memBlock = if (memories.isEmpty()) {
             "memories: none yet (say remember <fact>)"
         } else {
-            val bits = rankMemories(memories, tags, query).take(4).map { (note, tag) ->
-                val mark = tag
+            val bits = shown.map { hit ->
+                val mark = hit.tag
                     ?.takeIf { it.isNotBlank() }
                     ?.let { "[${com.cat.data.TruthTag.normalize(it)}] " }
                     .orEmpty()
-                "$mark${note.replace("\n", " ").take(90)}"
+                "$mark${hit.note.replace("\n", " ").take(90)}"
             }.joinToString(" · ")
-            "memories (${memories.size}): $bits"
+            "$usedHint · memories (${memories.size}): $bits"
         }
         val vaultBlock = if (vaultLines.isEmpty()) {
             "vault: no earlier lines"
@@ -501,25 +516,45 @@ class CopilotEngine(
         return reply.trimEnd() + "\n— $memBlock\n— $vaultBlock"
     }
 
-    /** Prefer notes that share words with the question. Tags stay on their note. */
+    data class RankedMemory(val note: String, val tag: String?, val score: Int, val index: Int)
+
+    /**
+     * Prefer notes that share words with the question.
+     * Exact token hits beat substrings; True tags get a small boost; False a small cut.
+     */
     private fun rankMemories(
         memories: List<String>,
         tags: List<String>,
         query: String
-    ): List<Pair<String, String?>> {
+    ): List<RankedMemory> {
         val wanted = query.lowercase()
             .split(Regex("[^a-z0-9]+"))
-            .filter { it.length > 2 }
-            .toSet()
+            .filter { it.length > 2 && it !in STOP }
+            .distinct()
         return memories.mapIndexed { index, note ->
-            val score = if (wanted.isEmpty()) {
-                0
-            } else {
-                note.lowercase().split(Regex("[^a-z0-9]+")).count { it in wanted }
+            val hay = note.lowercase()
+            val tokens = hay.split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() }.toSet()
+            var score = 0
+            for (w in wanted) {
+                when {
+                    w in tokens -> score += 3
+                    hay.contains(w) -> score += 1
+                }
             }
-            Triple(score, index, note to tags.getOrNull(index))
-        }.sortedWith(compareByDescending<Triple<Int, Int, Pair<String, String?>>> { it.first }.thenBy { it.second })
-            .map { it.third }
+            if (wanted.size >= 2) {
+                val phrase = wanted.take(3).joinToString(" ")
+                if (hay.contains(phrase)) score += 4
+            }
+            val tag = tags.getOrNull(index)
+            when (com.cat.data.TruthTag.normalize(tag.orEmpty())) {
+                "True" -> if (score > 0) score += 2
+                "False" -> if (score > 0) score -= 1
+            }
+            RankedMemory(note, tag, score, index)
+        }.sortedWith(
+            compareByDescending<RankedMemory> { it.score }
+                .thenByDescending { it.index }
+        )
     }
 
     private fun pack(
@@ -566,6 +601,7 @@ class CopilotEngine(
     }
 
     companion object {
+        private val CONFIRM_CLEAR = setOf("yes", "y", "confirm")
         private val REMEMBER = Regex("(?i)^(?:please\\s+)?remember(?:\\s+that)?\\s+(.+)$")
         private val CONFIDENCE = listOf(
             "i know", "i knew", "i'm sure", "im sure", "i am sure",
@@ -653,7 +689,7 @@ class CopilotEngine(
             - time — Australia/Perth clock
             - status — online or offline, version, memory count, vault size, persona
             - version — build name and code
-            - clear — wipe this Terminal transcript only (Chat stays)
+            - clear — ask to wipe this Terminal vault; /clear yes confirms (Chat stays)
             - unlock — how the PIN lock works
             - summarize — snapshot of this Terminal thread
             - tools — on-phone utilities
@@ -661,12 +697,12 @@ class CopilotEngine(
             - hash, b64, json, convert, pass — local text tools
 
             Typo repair fixes the command word, including near-misses (hlp, helpx, remeberr, stattus, unlck). Ordinary sentences stay as typed.
-            Every reply includes saved Room memories (notes that share your words first) and recent encrypted vault lines.
+            Every reply ranks Room memories that share your words (True tags rise), shows a short used-N hint, then recent vault lines.
             The algorithm rail lights INPUT, CORRECT, MEMORY, then REPLY. PRIVATE lights only when Private is on. It is a trace, not a self-build.
             Terminal voice defaults to Analyst. Coder, Coach, or Creative apply when the Wheel names them.
             Cloud is optional in Settings. Offline still answers.
             The PIN lock is separate from Chat. This transcript is AES-GCM and never writes chat history.
-            Private ON forces offline answers, blocks cloud, and blanks this app in the recents card.
+            Private ON forces offline answers, blocks cloud and online lookup, and blanks this app in the recents card.
         """.trimIndent()
 
         val UNLOCK_HELP = """

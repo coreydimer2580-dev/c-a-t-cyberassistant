@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -53,10 +54,10 @@ fun AlgorithmScanBackdrop(modifier: Modifier = Modifier) {
         val limit = size.height + size.width * slope
         while (y < limit) {
             drawLine(
-                color = NeonCyan.copy(alpha = 0.16f),
+                color = NeonCyan.copy(alpha = 0.18f),
                 start = Offset(0f, y),
                 end = Offset(size.width, y + size.width * slope),
-                strokeWidth = 1.4f
+                strokeWidth = 1.6f
             )
             y += gap
         }
@@ -64,10 +65,10 @@ fun AlgorithmScanBackdrop(modifier: Modifier = Modifier) {
         var x = -size.height * 0.35f + back
         while (x < size.width + size.height) {
             drawLine(
-                color = NeonMagenta.copy(alpha = 0.08f),
+                color = NeonMagenta.copy(alpha = 0.10f),
                 start = Offset(x, 0f),
                 end = Offset(x - size.height * 0.55f, size.height),
-                strokeWidth = 1f
+                strokeWidth = 1.1f
             )
             x += gap * 1.7f
         }
@@ -82,6 +83,22 @@ fun algorithmSteps(privateOn: Boolean): List<String> {
     }
 }
 
+private fun stepColors(index: Int, active: Int): Pair<Color, Color> {
+    val hot = index == active
+    val done = active >= 0 && index < active
+    val fg = when {
+        hot -> NeonCyan
+        done -> NeonLime
+        else -> Color(0xFF4A6B58)
+    }
+    val bg = when {
+        hot -> NeonCyan.copy(alpha = 0.28f)
+        done -> NeonLime.copy(alpha = 0.12f)
+        else -> Color(0xFF07110C)
+    }
+    return fg to bg
+}
+
 /** Neon step chips. [active] is the chip lighting now; earlier chips stay lit. */
 @Composable
 fun AlgorithmRail(steps: List<String>, active: Int, modifier: Modifier = Modifier) {
@@ -91,32 +108,23 @@ fun AlgorithmRail(steps: List<String>, active: Int, modifier: Modifier = Modifie
         horizontalArrangement = Arrangement.spacedBy(3.dp)
     ) {
         steps.forEachIndexed { index, label ->
+            val (fg, bg) = stepColors(index, active)
             val hot = index == active
             val done = active >= 0 && index < active
-            val fg = when {
-                hot -> NeonCyan
-                done -> NeonLime
-                else -> Color(0xFF3D5A4A)
-            }
-            val bg = when {
-                hot -> NeonCyan.copy(alpha = 0.24f)
-                done -> NeonLime.copy(alpha = 0.10f)
-                else -> Color(0xFF07110C)
-            }
             if (index > 0) {
                 Box(
                     modifier = Modifier
                         .width(7.dp)
                         .height(2.dp)
-                        .background(if (done || hot) fg.copy(alpha = 0.9f) else Color(0xFF1E3328))
+                        .background(if (done || hot) fg.copy(alpha = 0.95f) else Color(0xFF1E3328))
                 )
             }
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .border(1.dp, fg, RoundedCornerShape(3.dp))
+                    .border(1.2.dp, fg, RoundedCornerShape(3.dp))
                     .background(bg, RoundedCornerShape(3.dp))
-                    .padding(vertical = 4.dp),
+                    .padding(vertical = 5.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -125,6 +133,47 @@ fun AlgorithmRail(steps: List<String>, active: Int, modifier: Modifier = Modifie
                     fontFamily = FontFamily.Monospace,
                     fontWeight = if (hot) FontWeight.Bold else FontWeight.Medium,
                     fontSize = 9.sp,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+/** Vertical rail for Fold / wide Terminal — sits beside the transcript. */
+@Composable
+fun AlgorithmRailVertical(steps: List<String>, active: Int, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .border(1.2.dp, NeonCyan.copy(alpha = 0.55f), RoundedCornerShape(8.dp))
+            .background(Color(0xFF06100B), RoundedCornerShape(8.dp))
+            .padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            "TRACE",
+            color = NeonLime,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+            fontSize = 11.sp
+        )
+        steps.forEachIndexed { index, label ->
+            val (fg, bg) = stepColors(index, active)
+            val hot = index == active
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, fg, RoundedCornerShape(4.dp))
+                    .background(bg, RoundedCornerShape(4.dp))
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Text(
+                    text = "${index + 1}. $label",
+                    color = fg,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = if (hot) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = 12.sp,
                     maxLines = 1
                 )
             }

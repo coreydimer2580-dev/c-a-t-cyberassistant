@@ -95,6 +95,21 @@ object SoftCorrect {
         "summarze" to "summarize",
         "summrize" to "summarize",
         "seting" to "settings",
+        "helpppp" to "help",
+        "remembrr" to "remember",
+        "remmber" to "remember",
+        "recaall" to "recall",
+        "stauts" to "status",
+        "staatus" to "status",
+        "versioon" to "version",
+        "verssion" to "version",
+        "c1ear" to "clear",
+        "clrrr" to "clear",
+        "unllock" to "unlock",
+        "unlokk" to "unlock",
+        "sumarrize" to "summarize",
+        "settngs" to "settings",
+        "setttings" to "settings",
         "toools" to "tools",
         "todoo" to "todo"
     )
@@ -157,25 +172,32 @@ object SoftCorrect {
         for (target in fuzzyTargets) {
             if (token[0] != target[0]) continue
             if (kotlin.math.abs(token.length - target.length) > 2) continue
-            val distance = editDistance(token, target)
             val limit = if (token.length >= 8) 2 else 1
+            if (bestDistance <= 1 && limit == 1) break
+            val distance = editDistance(token, target, limit)
             if (distance in 1..limit && distance < bestDistance) {
                 best = target
                 bestDistance = distance
+                if (bestDistance == 1) break
             }
         }
         return best
     }
 
-    private fun editDistance(a: String, b: String): Int {
+    /** Levenshtein capped at [limit]; returns limit+1 when already worse. */
+    private fun editDistance(a: String, b: String, limit: Int): Int {
+        if (kotlin.math.abs(a.length - b.length) > limit) return limit + 1
         var prev = IntArray(b.length + 1) { it }
         var curr = IntArray(b.length + 1)
         for (i in a.indices) {
             curr[0] = i + 1
+            var rowMin = curr[0]
             for (j in b.indices) {
                 val cost = if (a[i] == b[j]) 0 else 1
                 curr[j + 1] = minOf(curr[j] + 1, prev[j + 1] + 1, prev[j] + cost)
+                if (curr[j + 1] < rowMin) rowMin = curr[j + 1]
             }
+            if (rowMin > limit) return limit + 1
             val swap = prev
             prev = curr
             curr = swap
