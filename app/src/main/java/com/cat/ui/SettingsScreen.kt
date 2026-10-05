@@ -306,6 +306,14 @@ private fun CopilotSettings() {
         if (saved.isNotEmpty()) Text(saved, color = NeonLime)
         return
     }
+    OutlinedButton(
+        onClick = {
+            baseUrl = CopilotPrefs.GEMINI_BASE_URL
+            if (!model.trim().lowercase().startsWith("gemini")) model = CopilotPrefs.GEMINI_MODEL
+            saved = "Gemini address filled. Paste your own Gemini API key, then Save."
+        },
+        modifier = Modifier.fillMaxWidth()
+    ) { Text("Use Gemini (paste your key only)") }
     OutlinedTextField(
         value = baseUrl,
         onValueChange = { baseUrl = it },
@@ -314,7 +322,7 @@ private fun CopilotSettings() {
         placeholder = { Text(CopilotPrefs.URL_HINT) }
     )
     Text(
-        "Needs your own free endpoint (e.g. a Groq or OpenRouter key you add). Offline works with none. C@T ships with no key.",
+        "Tap Use Gemini and paste your own key, or use any OpenAI-compatible endpoint (Groq, OpenRouter). Offline works with none. C@T ships with no key.",
         color = Color(0xFFBFE8FF),
         fontSize = 12.sp
     )
@@ -334,6 +342,7 @@ private fun CopilotSettings() {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = {
             prefs.apiKey = apiKey
+            model = CopilotPrefs.modelFor(baseUrl, model)
             prefs.model = model
             saved = when {
                 baseUrl.isBlank() -> { prefs.baseUrl = ""; "No cloud address. Offline only." }

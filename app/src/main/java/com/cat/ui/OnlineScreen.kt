@@ -54,7 +54,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * v1.15 Online tab. ChatGPT-style chat that never asks for a login or key.
+ * v1.15 Online tab (v1.18: Use Gemini = key-only preset). ChatGPT-style chat that never asks for a login or key.
  * No cloud saved -> Offline English AI answers (same brain as Chat).
  * Cloud saved (your URL + key) -> labelled "Optional cloud", with offline fallback.
  */
@@ -379,10 +379,20 @@ private fun OptionalCloudCard(cloudReady: Boolean, onChanged: () -> Unit, onClos
         )
         Text(
             "You don't need this. Online already answers with Offline English AI, no login or key. " +
-                "If you have your own OpenAI-compatible URL and key, paste them here.",
+                "Tap Use Gemini and paste only your own Gemini API key, or paste any OpenAI-compatible URL + key.",
             color = Mist,
             fontSize = 11.sp
         )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Pill("Use Gemini", NeonCyan) {
+                url = CopilotPrefs.GEMINI_BASE_URL
+                if (!model.trim().lowercase().startsWith("gemini")) model = CopilotPrefs.GEMINI_MODEL
+                status = "Gemini address filled. Paste your own key from Google AI Studio, then Save."
+            }
+            if (CopilotPrefs.isGeminiUrl(url)) {
+                Text("Gemini · key only", color = NeonLime, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+        }
         OutlinedTextField(
             value = url,
             onValueChange = { url = it },
@@ -396,7 +406,7 @@ private fun OptionalCloudCard(cloudReady: Boolean, onChanged: () -> Unit, onClos
             value = key,
             onValueChange = { key = it },
             singleLine = true,
-            label = { Text("API key (optional)") },
+            label = { Text(if (CopilotPrefs.isGeminiUrl(url)) "Gemini API key (yours)" else "API key (optional)") },
             visualTransformation = PasswordVisualTransformation(),
             colors = fieldColors,
             modifier = Modifier.fillMaxWidth()
@@ -413,6 +423,9 @@ private fun OptionalCloudCard(cloudReady: Boolean, onChanged: () -> Unit, onClos
             Pill("Save", NeonLime) {
                 val cleanUrl = url.trim()
                 status = when {
+                    CopilotPrefs.isGeminiUrl(cleanUrl) && key.isBlank() -> {
+                        "Paste your Gemini API key first. Nothing changed — Offline keeps answering."
+                    }
                     cleanUrl.isBlank() || key.isBlank() -> {
                         "Needs both a URL and a key. Nothing changed — Offline keeps answering."
                     }
@@ -424,10 +437,16 @@ private fun OptionalCloudCard(cloudReady: Boolean, onChanged: () -> Unit, onClos
                         "That doesn't look like a web address (https://…). Not saved."
                     }
                     else -> {
+                        val cleanModel = CopilotPrefs.modelFor(cleanUrl, model)
                         prefs.baseUrl = cleanUrl
                         prefs.apiKey = key
-                        prefs.model = model
-                        "Saved. Online uses your cloud and answers offline if it can't reach it."
+                        prefs.model = cleanModel
+                        model = cleanModel
+                        if (CopilotPrefs.isGeminiUrl(cleanUrl)) {
+                            "Saved. Online uses Gemini with your key and answers offline if it can't reach it."
+                        } else {
+                            "Saved. Online uses your cloud and answers offline if it can't reach it."
+                        }
                     }
                 }
                 onChanged()

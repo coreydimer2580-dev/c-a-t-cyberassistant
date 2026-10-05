@@ -200,6 +200,28 @@ class CopilotPrefs(context: Context) {
         /** Shown as a hint only. Never saved by default. */
         const val URL_HINT = "https://api.groq.com/openai/v1"
 
+        /**
+         * v1.18 Gemini key-only preset. Google's official OpenAI-compatible endpoint
+         * (CloudChatClient appends /chat/completions and sends "Authorization: Bearer <key>").
+         * No key ships with the app — the user pastes their own from Google AI Studio.
+         */
+        const val GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
+        /** Auto-updating Gemini Flash alias, so the preset keeps working as models change. */
+        const val GEMINI_MODEL = "gemini-flash-latest"
+
+        fun isGeminiUrl(url: String): Boolean =
+            url.trim().lowercase().contains("generativelanguage.googleapis.com")
+
+        /** Gemini endpoint with a non-Gemini model (e.g. the llama3.2 default) -> use the Gemini alias. */
+        fun modelFor(url: String, model: String): String {
+            val clean = model.trim()
+            return if (isGeminiUrl(url) && !clean.lowercase().removePrefix("models/").startsWith("gemini")) {
+                GEMINI_MODEL
+            } else {
+                clean
+            }
+        }
+
         private val LOCAL_HOSTS = listOf(
             "10.0.2.2", "10.0.3.2", "localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]"
         )

@@ -1,6 +1,6 @@
 # C@T - Cyber AI Assistant
 
-Version 1.17 — Autopilot speech ON by default on first launch. Built on 1.16 + 1.15 ChatGPT-style **Online** tab (no login, no key: Offline English AI answers; optional cloud only with your own URL + key), plus the 1.14 offline Auto fixes. Kotlin, Jetpack Compose, Room. Neon cyan, magenta, and lime on black.
+Version 1.18 — Gemini key-only preset: in Online (or Settings) tap **Use Gemini**, paste your own Gemini API key, Save. Built on 1.17 Autopilot speech ON by default + 1.16 + 1.15 ChatGPT-style **Online** tab (no login, no key: Offline English AI answers; optional cloud only with your own URL + key), plus the 1.14 offline Auto fixes. Kotlin, Jetpack Compose, Room. Neon cyan, magenta, and lime on black.
 
 Opens on **Terminal**. Primary tabs: **Terminal · Chat · Online · Wheel · Memory · Settings**.
 
@@ -9,6 +9,7 @@ Opens on **Terminal**. Primary tabs: **Terminal · Chat · Online · Wheel · Me
 - ChatGPT-style bubbles with typing animation, Copy, and ✎ New.
 - Works with no login and no key: answers come from the same Offline English AI as Chat.
 - Optional cloud: tap the header to paste your own OpenAI-compatible URL + key. Labelled "Optional cloud" only when both are saved.
+- **Use Gemini** (v1.18): fills Google's official OpenAI-compatible endpoint `https://generativelanguage.googleapis.com/v1beta/openai` and model `gemini-flash-latest`. You only paste your own key (Google AI Studio). No key ships in the app.
 - Emulator/loopback addresses (10.0.2.2, localhost, 127.x) are refused and never contacted.
 - If the cloud fails, is quiet, or there's no network, the reply falls back to offline. No API key ships in the app.
 

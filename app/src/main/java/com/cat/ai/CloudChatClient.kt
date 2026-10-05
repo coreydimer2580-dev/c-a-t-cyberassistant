@@ -7,6 +7,7 @@ import org.json.JSONObject
 
 /**
  * OpenAI-compatible chat completions. The caller supplies the URL and key.
+ * Works with Google Gemini's OpenAI-compatible endpoint (CopilotPrefs.GEMINI_BASE_URL).
  */
 class CloudChatClient {
     fun complete(
@@ -21,7 +22,8 @@ class CloudChatClient {
         val root = baseUrl.trim().trimEnd('/')
         val endpoint = if (root.endsWith("/chat/completions")) root else "$root/chat/completions"
         val payload = JSONObject()
-        payload.put("model", model.ifBlank { "llama3.2" })
+        val chosen = com.cat.data.CopilotPrefs.modelFor(root, model)
+        payload.put("model", chosen.ifBlank { "llama3.2" })
         val array = JSONArray()
         messages.forEach { (role, content) ->
             array.put(JSONObject().put("role", role).put("content", content))
@@ -30,8 +32,10 @@ class CloudChatClient {
 
         val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
-            connectTimeout = 4_000
-            readTimeout = 12_000
+            // Gemini Flash may think before answering; give it longer. Offline still covers failures.
+            val gemini = com.cat.data.CopilotPrefs.isGeminiUrl(root)
+            connectTimeout = if (gemini) 8_000 else 4_000
+            readTimeout = if (gemini) 30_000 else 12_000
             doOutput = true
             setRequestProperty("Content-Type", "application/json")
             if (apiKey.isNotBlank()) {

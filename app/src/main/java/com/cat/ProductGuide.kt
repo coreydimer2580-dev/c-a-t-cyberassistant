@@ -5,7 +5,7 @@ package com.cat
  * Visual and help text only. It does not update the app or listen in the background.
  */
 object ProductGuide {
-    const val VERSION_LABEL = "v1.17 · Autopilot on"
+    const val VERSION_LABEL = "v1.18 · Gemini key-only"
     const val PATH = "YOU → SoftCorrect → MEMORY → REPLY → Evolve"
     const val SPEECH = "Autopilot speech starts ON (Chat only). Tap Speak to turn off. Terminal stays quiet. No mic."
     const val SAFE = "No shell, no packages, no background mic, no 24/7 crawl, no self-update, no other-app scan."
@@ -15,7 +15,7 @@ object ProductGuide {
     fun surfaces(): List<Surface> = listOf(
         Surface("Terminal", "Home. PIN gate, Private, AES vault, one-tap Auto, todo chips, Perth clock, evolve path on each send."),
         Surface("Chat", "Replies here. Speech starts ON; optional online evolve only when you send."),
-        Surface("Online", "ChatGPT-style chat. No login or key: Offline English AI answers. Optional cloud only if you add your own URL + key."),
+        Surface("Online", "ChatGPT-style chat. No login or key: Offline English AI answers. Optional cloud: Use Gemini + your own key, or your own URL + key."),
         Surface("Wheel", "Who answers: Offline, Cloud, Auto, Analyst, Coder, Coach, Creative, or Group."),
         Surface("Memory", "Notes stay on this phone. Swipe to tag True, False, or Unsure. Export as PDF via the share sheet."),
         Surface("Settings", "Use Offline only, or Try Cloud if saved. Neon accent, easy PIN change, backup reminder.")
