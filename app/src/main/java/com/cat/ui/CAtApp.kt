@@ -47,6 +47,7 @@ import com.cat.ui.theme.neonCard
 
 private object Routes {
     const val CHAT = "chat"
+    const val TERMINAL = "terminal"
     const val WHEEL = "wheel"
     const val MEMORY = "memory"
     const val SETTINGS = "settings"
@@ -63,8 +64,8 @@ fun CAtApp() {
         false
     }
 
-    val tabs = listOf("Chat", "Wheel", "Memory", "Settings")
-    val routes = listOf(Routes.CHAT, Routes.WHEEL, Routes.MEMORY, Routes.SETTINGS)
+    val tabs = listOf("Chat", "Terminal", "Wheel", "Memory", "Settings")
+    val routes = listOf(Routes.CHAT, Routes.TERMINAL, Routes.WHEEL, Routes.MEMORY, Routes.SETTINGS)
     var selectedTab by remember { mutableIntStateOf(0) }
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
@@ -83,9 +84,10 @@ fun CAtApp() {
     androidx.compose.runtime.LaunchedEffect(route) {
         val tabIndex = when (route) {
             Routes.CHAT -> 0
-            Routes.WHEEL -> 1
-            Routes.MEMORY -> 2
-            Routes.SETTINGS, Routes.TOOLS -> 3
+            Routes.TERMINAL -> 1
+            Routes.WHEEL -> 2
+            Routes.MEMORY -> 3
+            Routes.SETTINGS, Routes.TOOLS -> 4
             else -> selectedTab
         }
         if (tabIndex != selectedTab) selectedTab = tabIndex
@@ -113,11 +115,11 @@ fun CAtApp() {
                         AppNav(
                             navController = navController,
                             wide = true,
-                            onOpenWheel = { openTab(1) },
+                            onOpenWheel = { openTab(2) },
                             onOpenTools = {
                                 navController.navigate(Routes.TOOLS) { launchSingleTop = true }
                             },
-                            onToolsBack = { openTab(3) }
+                            onToolsBack = { openTab(4) }
                         )
                     }
                 }
@@ -131,7 +133,7 @@ fun CAtApp() {
                         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                             CatWordmark(size = 40.sp)
                             Text(
-                                "v1.7 · Terminal",
+                                "v1.8 · Locked terminal",
                                 color = NeonLime,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Black,
@@ -171,11 +173,11 @@ fun CAtApp() {
                     AppNav(
                         navController = navController,
                         wide = false,
-                        onOpenWheel = { openTab(1) },
+                        onOpenWheel = { openTab(2) },
                         onOpenTools = {
                             navController.navigate(Routes.TOOLS) { launchSingleTop = true }
                         },
-                        onToolsBack = { openTab(3) }
+                        onToolsBack = { openTab(4) }
                     )
                 }
             }
@@ -197,7 +199,7 @@ private fun NeonSidebar(
             .padding(14.dp)
     ) {
         CatWordmark(size = 40.sp)
-        Text("v1.7 · Terminal", color = NeonLime, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Text("v1.8 · Locked terminal", color = NeonLime, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         Text("Terminal · Wheel · Memory", color = NeonMagenta, fontSize = 11.sp, modifier = Modifier.padding(bottom = 16.dp))
         tabs.forEachIndexed { index, title ->
             SideItem(
@@ -205,7 +207,8 @@ private fun NeonSidebar(
                 selected = selectedTab == index,
                 accent = when (index) {
                     0 -> NeonCyan
-                    1 -> NeonMagenta
+                    1 -> NeonLime
+                    2 -> NeonMagenta
                     else -> NeonLime
                 },
                 onClick = { onSelect(index) }
@@ -249,6 +252,10 @@ private fun ColumnScope.AppNav(
     ) {
         composable(Routes.CHAT) {
             ChatScreen(wide = wide, onOpenWheel = onOpenWheel)
+        }
+        composable(Routes.TERMINAL) {
+            val app = androidx.compose.ui.platform.LocalContext.current.applicationContext as com.cat.CAtApplication
+            TerminalScreen(app)
         }
         composable(Routes.WHEEL) {
             WheelScreen(wide = wide)

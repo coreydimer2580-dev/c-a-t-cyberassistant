@@ -33,6 +33,41 @@ class CopilotRepository(
 
     suspend fun history(): List<ChatMessage> = database.chatDao().getAll()
 
+    data class TerminalAnswer(val reply: String, val notice: String?)
+
+    /**
+     * English AI reply for the locked terminal screen.
+     * Does not write ChatDao, does not evolve, and does not search the web.
+     */
+    suspend fun answerTerminal(userText: String, prior: List<Pair<String, String>>): TerminalAnswer {
+        val prepared = engine.prepare(userText)
+        if (prepared.text.isBlank()) return TerminalAnswer("Nothing to send.", null)
+        val (lines, tags) = taggedMemory()
+        val persona = prefs.persona
+        val offline = engine.respond(prepared.text, prior, lines, todoLines(), tags, persona)
+        if (!offline.memoryToSave.isNullOrBlank()) {
+            database.memoryDao().insert(
+                MemoryEntity(
+                    content = offline.memoryToSave,
+                    category = "terminal",
+                    createdAt = System.currentTimeMillis(),
+                    truthTag = TruthTag.UNSURE
+                )
+            )
+        }
+        if (!offline.todoToAdd.isNullOrBlank()) {
+            prefs.saveTodos(prefs.loadTodos() + (false to offline.todoToAdd))
+        }
+        val spoken = if (offline.memoryToSave.isNullOrBlank()) {
+            offline.reply.removeSuffix(EVOLVE_TRAILER).trimEnd()
+        } else {
+            offline.reply
+        }
+        val history = prior + ("user" to prepared.text)
+        val (reply, notice) = resolveTerminal(spoken, offline, persona, history)
+        return TerminalAnswer(reply, notice)
+    }
+
     suspend fun clear(): Turn {
         database.chatDao().clearAll()
         return Turn(emptyList(), null)
@@ -304,6 +339,14 @@ class CopilotRepository(
     }
 
     private suspend fun cloudMessages(persona: AiPersona): List<Pair<String, String>> {
+        val history = database.chatDao().getAll().takeLast(16).map { it.role to it.content }
+        return promptFor(persona, history)
+    }
+
+    private suspend fun promptFor(
+        persona: AiPersona,
+        history: List<Pair<String, String>>
+    ): List<Pair<String, String>> {
         val notes = database.memoryDao().getAll().take(12).joinToString("\n") {
             "[${TruthTag.normalize(it.truthTag)}] ${it.content}"
         }.ifBlank { "(none)" }
@@ -321,11 +364,36 @@ class CopilotRepository(
             Do not role-play as a lie detector or investigator.
             Truth tags are user-set True, False, or Unsure. Do not assign or change them.
             Home timezone is Australia/Perth. Locale is en-AU.
+            This is an English assistant, not a system shell.
             Memory notes:
             $notes
         """.trimIndent()
-        val history = database.chatDao().getAll().takeLast(16).map { it.role to it.content }
         return listOf("system" to system) + history
+    }
+
+    private suspend fun resolveTerminal(
+        spoken: String,
+        offline: CopilotEngine.OfflineResult,
+        persona: AiPersona,
+        history: List<Pair<String, String>>
+    ): Pair<String, String?> {
+        val mode = persona.linkedMode ?: prefs.mode
+        if (offline.skipCloud || mode == CopilotMode.OFFLINE) {
+            return spoken to null
+        }
+        val online = runCatching { networkAvailable() }.getOrDefault(false)
+        if (!online) return spoken to "No network. Answered offline."
+        if (prefs.baseUrl.isBlank()) return spoken to "No cloud base URL. Answered offline."
+        return try {
+            val raw = withContext(Dispatchers.IO) {
+                cloud.complete(prefs.baseUrl, prefs.apiKey, prefs.model, promptFor(persona, history.takeLast(16)))
+            }
+            if (raw.isBlank()) spoken to "Cloud returned an empty reply. Answered offline."
+            else raw to null
+        } catch (error: Exception) {
+            val detail = error.message?.take(140) ?: error.javaClass.simpleName
+            spoken to "Cloud failed ($detail). Answered offline."
+        }
     }
 
     private suspend fun taggedMemory(): Pair<List<String>, List<String>> {
@@ -365,4 +433,9 @@ class CopilotRepository(
     }
 
     private fun CopilotEngine.OfflineResult.textClean(): String = reply.trim()
+
+    companion object {
+        private const val EVOLVE_TRAILER =
+            "\nC@T evolving memory saved a short note (Unsure until you tag it True, False, or Unsure)."
+    }
 }

@@ -96,6 +96,33 @@ class CopilotPrefs(context: Context) {
         prefs.edit().putString(KEY_TODOS, raw).apply()
     }
 
+
+    fun terminalPinSalt(): String = prefs.getString(KEY_TERM_SALT, "").orEmpty()
+
+    fun terminalPinHash(): String = prefs.getString(KEY_TERM_HASH, "").orEmpty()
+
+    fun setTerminalPin(saltHex: String, hashHex: String) {
+        prefs.edit().putString(KEY_TERM_SALT, saltHex).putString(KEY_TERM_HASH, hashHex).apply()
+    }
+
+    fun terminalFails(): Int = prefs.getInt(KEY_TERM_FAILS, 0)
+
+    fun setTerminalFails(count: Int) {
+        prefs.edit().putInt(KEY_TERM_FAILS, count).apply()
+    }
+
+    fun terminalCooldownUntil(): Long = prefs.getLong(KEY_TERM_COOLDOWN, 0L)
+
+    fun setTerminalCooldownUntil(epochMs: Long) {
+        prefs.edit().putLong(KEY_TERM_COOLDOWN, epochMs).apply()
+    }
+
+    fun terminalAesKey(): String = prefs.getString(KEY_TERM_AES, "").orEmpty()
+
+    fun setTerminalAesKey(base64: String) {
+        prefs.edit().putString(KEY_TERM_AES, base64).apply()
+    }
+
     private fun openEncrypted(context: Context): SharedPreferences {
         val masterKey = MasterKey.Builder(context)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
@@ -121,5 +148,10 @@ class CopilotPrefs(context: Context) {
         private const val KEY_API = "api_key"
         private const val KEY_MODEL = "model"
         private const val KEY_TODOS = "todos"
+        private const val KEY_TERM_SALT = "term_pin_salt"
+        private const val KEY_TERM_HASH = "term_pin_hash"
+        private const val KEY_TERM_FAILS = "term_fails"
+        private const val KEY_TERM_COOLDOWN = "term_cooldown"
+        private const val KEY_TERM_AES = "term_aes_key"
     }
 }

@@ -9,6 +9,8 @@ import androidx.room.Room
 import com.cat.data.AppDatabase
 import com.cat.data.CopilotPrefs
 import com.cat.data.CopilotRepository
+import com.cat.data.TerminalVault
+import com.cat.security.TerminalLock
 import java.util.Locale
 
 class CAtApplication : Application() {
@@ -17,6 +19,10 @@ class CAtApplication : Application() {
     lateinit var prefs: CopilotPrefs
         private set
     lateinit var copilot: CopilotRepository
+        private set
+    lateinit var terminalLock: TerminalLock
+        private set
+    lateinit var terminalVault: TerminalVault
         private set
 
     override fun attachBaseContext(base: Context) {
@@ -47,6 +53,8 @@ class CAtApplication : Application() {
             prefs.mode = com.cat.ai.CopilotMode.OFFLINE
         }
         copilot = CopilotRepository(database, prefs, networkAvailable = { hasNetwork() })
+        terminalLock = TerminalLock(prefs)
+        terminalVault = TerminalVault(applicationContext, prefs)
     }
 
     private fun hasNetwork(): Boolean {

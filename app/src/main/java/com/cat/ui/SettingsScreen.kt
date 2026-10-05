@@ -54,6 +54,7 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         CopilotSettings()
+        TerminalPinSettings()
         if (onOpenTools != null) {
             OutlinedButton(onClick = onOpenTools) {
                 Text("More tools (/call · /sms · notes)", color = NeonCyan)
@@ -64,6 +65,55 @@ fun SettingsScreen(
             ToggleList(features, onToggle)
         }
     }
+}
+
+
+@Composable
+private fun TerminalPinSettings() {
+    val app = LocalContext.current.applicationContext as CAtApplication
+    var current by remember { mutableStateOf("") }
+    var next by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
+    var message by remember { mutableStateOf("") }
+    Text("Terminal lock", color = NeonCyan, fontSize = 22.sp)
+    Text(
+        "Terminal is its own screen. The PIN is stored as a salted hash in encrypted preferences. The transcript is encrypted apart from Chat. Change it here any time (4–8 digits).",
+        color = Color(0xFFBFE8FF)
+    )
+    OutlinedTextField(
+        value = current,
+        onValueChange = { current = it.filter { ch -> ch.isDigit() }.take(8) },
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text("Current PIN") },
+        visualTransformation = PasswordVisualTransformation()
+    )
+    OutlinedTextField(
+        value = next,
+        onValueChange = { next = it.filter { ch -> ch.isDigit() }.take(8) },
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text("New PIN") },
+        visualTransformation = PasswordVisualTransformation()
+    )
+    OutlinedTextField(
+        value = confirm,
+        onValueChange = { confirm = it.filter { ch -> ch.isDigit() }.take(8) },
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text("Confirm new PIN") },
+        visualTransformation = PasswordVisualTransformation()
+    )
+    Button(onClick = {
+        message = when (val result = app.terminalLock.changePin(current, next, confirm)) {
+            com.cat.security.TerminalLock.Change.Ok -> {
+                current = ""; next = ""; confirm = ""
+                "PIN updated. Terminal is locked until you unlock it."
+            }
+            com.cat.security.TerminalLock.Change.BadFormat -> "Use 4 to 8 digits."
+            com.cat.security.TerminalLock.Change.Mismatch -> "New PIN and confirm do not match."
+            is com.cat.security.TerminalLock.Change.Wrong -> "Current PIN was wrong. ${result.left} tries left."
+            is com.cat.security.TerminalLock.Change.Wait -> "Too many tries. Wait ${result.seconds}s."
+        }
+    }) { Text("Change PIN") }
+    if (message.isNotEmpty()) Text(message, color = NeonLime)
 }
 
 @Composable
