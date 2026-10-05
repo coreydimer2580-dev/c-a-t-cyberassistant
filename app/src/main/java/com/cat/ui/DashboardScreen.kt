@@ -44,7 +44,8 @@ fun DashboardScreen(
     wide: Boolean,
     refreshKey: Int,
     onLaunch: () -> Unit,
-    onOpenMemory: () -> Unit
+    onOpenMemory: () -> Unit,
+    onOpenTools: () -> Unit
 ) {
     val context = LocalContext.current
     var modeLabel by remember { mutableStateOf("Offline") }
@@ -72,7 +73,7 @@ fun DashboardScreen(
             ) {
                 StatusCard(modeLabel, snippet, memoryCount)
                 Hero()
-                Actions(onLaunch, onOpenMemory)
+                Actions(onLaunch, onOpenMemory, onOpenTools)
             }
             Column(
                 modifier = Modifier
@@ -101,7 +102,7 @@ fun DashboardScreen(
         ) {
             StatusCard(modeLabel, snippet, memoryCount)
             Hero()
-            Actions(onLaunch, onOpenMemory)
+            Actions(onLaunch, onOpenMemory, onOpenTools)
             ModuleList(features)
             WorldList(worlds)
         }
@@ -119,6 +120,7 @@ private fun StatusCard(modeLabel: String, snippet: String, memoryCount: Int) {
     ) {
         Text("Copilot", color = NeonCyan, fontSize = 20.sp)
         Text("Mode: $modeLabel", color = NeonLime)
+        Text("Locale en-AU · Australia/Perth", color = Color(0xFFBFE8FF))
         Text("Memory notes: $memoryCount", color = Color(0xFFBFE8FF))
         Text("Last reply: $snippet", color = Color(0xFFEAFBFF))
     }
@@ -141,9 +143,9 @@ private fun Hero() {
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Cyber AI Assistant", color = NeonCyan, fontSize = 24.sp)
-                Text("Cover and inner display • Offline copilot by default", color = Color(0xFFBFE8FF))
+                Text("Australia/Perth • en-AU • Offline copilot by default", color = Color(0xFFBFE8FF))
                 Text(
-                    "Launch opens chat. Notes stay in this app. Cloud is optional.",
+                    "Launch opens chat. Wi-Fi is not required. Cloud is optional and falls back offline.",
                     color = NeonLime
                 )
             }
@@ -152,13 +154,13 @@ private fun Hero() {
 }
 
 @Composable
-private fun Actions(onLaunch: () -> Unit, onOpenMemory: () -> Unit) {
+private fun Actions(onLaunch: () -> Unit, onOpenMemory: () -> Unit, onOpenTools: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         ActionButton("Launch", NeonCyan, Color.Black, onLaunch)
-        ActionButton("Search", NeonMagenta, Color.White) {}
+        ActionButton("Tools", NeonMagenta, Color.White, onOpenTools)
         ActionButton("Memory", NeonLime, Color.Black, onOpenMemory)
     }
 }

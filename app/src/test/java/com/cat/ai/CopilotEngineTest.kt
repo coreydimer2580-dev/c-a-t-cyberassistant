@@ -69,4 +69,25 @@ class CopilotEngineTest {
         assertFalse(result.reply.contains("ada@example.com"))
         assertFalse(result.memoryToSave.orEmpty().contains("ada@example.com"))
     }
+
+    @Test
+    fun slashToolsAndTimeStayLocal() {
+        val tools = engine.respond("/tools", emptyList(), emptyList())
+        assertTrue(tools.reply.contains("Australia/Perth"))
+        assertTrue(tools.reply.contains("Checklist"))
+        assertTrue(tools.skipCloud)
+        val timed = CopilotEngine(clockMillis = { 0L }).respond("/time", emptyList(), emptyList())
+        assertTrue(timed.reply.contains("Perth"))
+        assertTrue(timed.reply.contains("8:00:00"))
+        assertTrue(timed.skipCloud)
+    }
+
+    @Test
+    fun slashRememberAndTodo() {
+        val remembered = engine.respond("/remember that tea is at 4", emptyList(), emptyList())
+        assertEquals("tea is at 4", remembered.memoryToSave)
+        val todo = engine.respond("/todo buy milk", emptyList(), emptyList())
+        assertEquals("buy milk", todo.todoToAdd)
+        assertTrue(engine.respond("/help", emptyList(), emptyList()).reply.contains("/sms"))
+    }
 }

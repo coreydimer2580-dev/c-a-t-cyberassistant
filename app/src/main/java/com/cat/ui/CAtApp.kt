@@ -41,6 +41,7 @@ private object Routes {
     const val WORLD = "world"
     const val SETTINGS = "settings"
     const val CHAT = "chat"
+    const val TOOLS = "tools"
 }
 
 @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
@@ -53,10 +54,11 @@ fun CAtApp() {
         false
     }
 
-    val tabs = listOf("Dashboard", "Memory", "Voice", "World", "Settings")
+    val tabs = listOf("Dashboard", "Memory", "Tools", "Voice", "World", "Settings")
     val routes = listOf(
         Routes.DASHBOARD,
         Routes.MEMORY,
+        Routes.TOOLS,
         Routes.VOICE,
         Routes.WORLD,
         Routes.SETTINGS
@@ -163,10 +165,12 @@ fun CAtApp() {
                             wide = wide,
                             refreshKey = dashEpoch,
                             onLaunch = { navController.navigate(Routes.CHAT) },
-                            onOpenMemory = { openTab(1) }
+                            onOpenMemory = { openTab(1) },
+                            onOpenTools = { openTab(2) }
                         )
                     }
                     composable(Routes.MEMORY) { MemoryScreen(stacks, wide) }
+                    composable(Routes.TOOLS) { ToolsScreen(wide) }
                     composable(Routes.VOICE) { VoiceScreen(voices) }
                     composable(Routes.WORLD) { WorldScreen(worlds) }
                     composable(Routes.SETTINGS) {

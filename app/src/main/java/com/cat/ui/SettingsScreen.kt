@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -22,15 +23,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cat.CAtApplication
 import com.cat.ai.CopilotMode
 import com.cat.ai.SensitiveFilter
+import com.cat.data.CopilotPrefs
 import com.cat.model.FeatureToggle
 import com.cat.ui.theme.NeonCyan
 import com.cat.ui.theme.NeonLime
@@ -56,8 +58,7 @@ fun SettingsScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 CopilotSettings()
-                CopilotSettings()
-            FilterDemo()
+                FilterDemo()
             }
             Column(
                 modifier = Modifier
@@ -76,6 +77,7 @@ fun SettingsScreen(
                 .padding(top = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            CopilotSettings()
             FilterDemo()
             ToggleList(features, onToggle)
         }
@@ -87,7 +89,7 @@ private fun FilterDemo() {
     val filter = remember { SensitiveFilter() }
     var draft by remember { mutableStateOf("") }
     var redacted by remember { mutableStateOf("") }
-    Text("Settings and privacy", color = NeonCyan, fontSize = 28.sp)
+    Text("Privacy filter", color = NeonCyan, fontSize = 22.sp)
     Text(
         "Paste text to redact emails, SSNs, card numbers, phone numbers, and secret keywords. Only this field is read.",
         color = Color(0xFFBFE8FF)
@@ -145,8 +147,12 @@ private fun CopilotSettings() {
 
     Text("Copilot", color = NeonCyan, fontSize = 28.sp)
     Text(
+        "Offline is the default (Australia/Perth, en-AU). It never waits on Wi-Fi. Cloud and Auto use a network only when one is available, then fall back offline.",
+        color = Color(0xFFBFE8FF)
+    )
+    Text(
         if (prefs.encrypted) {
-            "API key is stored in encrypted preferences on this device."
+            "API key is stored in encrypted preferences on this device. Leave it blank for a free local Ollama server."
         } else {
             "Encryption unavailable. The API key is in plain app preferences. Do not use a valuable key."
         },
@@ -165,22 +171,18 @@ private fun CopilotSettings() {
             )
         }
     }
-    Text(
-        "Offline stays on device. Cloud calls your URL. Auto tries cloud, then offline.",
-        color = Color(0xFFBFE8FF)
-    )
     OutlinedTextField(
         value = baseUrl,
         onValueChange = { baseUrl = it },
         modifier = Modifier.fillMaxWidth(),
         label = { Text("Base URL") },
-        placeholder = { Text("https://api.openai.com/v1") }
+        placeholder = { Text(CopilotPrefs.EMULATOR_OLLAMA_URL) }
     )
     OutlinedTextField(
         value = apiKey,
         onValueChange = { apiKey = it },
         modifier = Modifier.fillMaxWidth(),
-        label = { Text("API key") },
+        label = { Text("API key (optional)") },
         visualTransformation = PasswordVisualTransformation()
     )
     OutlinedTextField(
@@ -189,12 +191,27 @@ private fun CopilotSettings() {
         modifier = Modifier.fillMaxWidth(),
         label = { Text("Model") }
     )
-    Button(onClick = {
-        prefs.baseUrl = baseUrl
-        prefs.apiKey = apiKey
-        prefs.model = model
-        saved = "Cloud settings saved"
-    }) { Text("Save cloud settings") }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = {
+            prefs.baseUrl = baseUrl
+            prefs.apiKey = apiKey
+            prefs.model = model
+            saved = "Cloud settings saved. Offline stays available if the network fails."
+        }) { Text("Save") }
+        OutlinedButton(onClick = {
+            baseUrl = CopilotPrefs.EMULATOR_OLLAMA_URL
+            model = CopilotPrefs.DEFAULT_MODEL
+            apiKey = ""
+            prefs.baseUrl = baseUrl
+            prefs.model = model
+            prefs.apiKey = ""
+            saved = "Emulator host set to 10.0.2.2 for a free local Ollama. Mode stays ${mode.label} until you change it."
+        }) { Text("Emulator 10.0.2.2") }
+    }
+    Text(
+        "10.0.2.2 is the Android emulator's route to the computer running Ollama. On a real Fold 6, use that computer's LAN address instead. No paid API, no root, no custom ROM.",
+        color = Color(0xFFBFE8FF)
+    )
     if (saved.isNotEmpty()) {
         Text(saved, color = NeonLime)
     }

@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import com.cat.CAtApplication
 import com.cat.ai.CopilotMode
 import com.cat.data.ChatMessage
+import com.cat.tools.PhoneIntents
 import com.cat.ui.theme.NeonCyan
 import com.cat.ui.theme.NeonLime
 import com.cat.ui.theme.NeonMagenta
@@ -42,7 +43,8 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun ChatScreen(onBack: () -> Unit, wide: Boolean) {
-    val app = LocalContext.current.applicationContext as CAtApplication
+    val context = LocalContext.current
+    val app = context.applicationContext as CAtApplication
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     var messages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
@@ -51,9 +53,17 @@ fun ChatScreen(onBack: () -> Unit, wide: Boolean) {
     var busy by remember { mutableStateOf(false) }
     var mode by remember { mutableStateOf(app.prefs.mode) }
 
-    fun apply(turnMessages: List<ChatMessage>, turnNotice: String?) {
-        messages = turnMessages
-        notice = turnNotice
+    fun apply(turn: com.cat.data.CopilotRepository.Turn) {
+        messages = turn.messages
+        notice = turn.notice
+        val phone = turn.phone
+        val dial = phone?.dial
+        val number = phone?.number
+        if (dial != null && number != null) {
+            val intent = if (dial) PhoneIntents.dialIntent(number) else PhoneIntents.smsIntent(number, phone.body)
+            val problem = PhoneIntents.launch(context, intent)
+            if (problem != null) notice = problem
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -89,6 +99,11 @@ fun ChatScreen(onBack: () -> Unit, wide: Boolean) {
                     )
                 }
             }
+            Text(
+                "Offline default · Australia/Perth · en-AU · does not wait on Wi-Fi",
+                color = Color(0xFFBFE8FF),
+                fontSize = 12.sp
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 CopilotMode.entries.forEach { item ->
                     FilterChip(
@@ -99,6 +114,11 @@ fun ChatScreen(onBack: () -> Unit, wide: Boolean) {
                         },
                         label = { Text(item.label) }
                     )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("/help", "/recall", "/tools", "/time").forEach { command ->
+                    OutlinedButton(onClick = { draft = command }) { Text(command) }
                 }
             }
             if (!notice.isNullOrBlank()) {
@@ -144,7 +164,7 @@ fun ChatScreen(onBack: () -> Unit, wide: Boolean) {
                                     )
                                 }
                             }
-                            apply(turn.messages, turn.notice)
+                            apply(turn)
                             busy = false
                         }
                     },
@@ -158,7 +178,7 @@ fun ChatScreen(onBack: () -> Unit, wide: Boolean) {
                             val turn = runCatching { app.copilot.regenerate() }.getOrElse {
                                 com.cat.data.CopilotRepository.Turn(messages, it.message ?: "Regenerate failed")
                             }
-                            apply(turn.messages, turn.notice)
+                            apply(turn)
                             busy = false
                         }
                     },
@@ -169,7 +189,7 @@ fun ChatScreen(onBack: () -> Unit, wide: Boolean) {
                         busy = true
                         scope.launch {
                             val turn = app.copilot.clear()
-                            apply(turn.messages, turn.notice)
+                            apply(turn)
                             busy = false
                         }
                     },
@@ -188,7 +208,7 @@ fun ChatScreen(onBack: () -> Unit, wide: Boolean) {
                 Text("Copilot", color = NeonCyan, fontSize = 22.sp)
                 Text("Mode: ${mode.label}", color = NeonLime)
                 Text(
-                    "Offline answers on device from this thread and your notes. Cloud posts the filtered thread to your URL. Auto tries cloud, then offline.",
+                    "Offline answers on this phone and does not wait for Wi-Fi. Cloud and Auto use the network only when it is available, then fall back offline. /call and /sms open your own dialer or SMS app.",
                     color = Color(0xFFBFE8FF)
                 )
                 Text(

@@ -45,6 +45,25 @@ class CopilotPrefs(context: Context) {
             prefs.edit().putString(KEY_MODEL, value.trim().ifBlank { DEFAULT_MODEL }).apply()
         }
 
+    fun loadTodos(): List<Pair<Boolean, String>> {
+        val raw = prefs.getString(KEY_TODOS, "").orEmpty()
+        if (raw.isBlank()) return emptyList()
+        return raw.lineSequence().mapNotNull { line ->
+            if (line.length < 2 || line[1] != '|') return@mapNotNull null
+            val done = line[0] == '1'
+            val text = line.substring(2).trim()
+            if (text.isEmpty()) null else done to text
+        }.take(100).toList()
+    }
+
+    fun saveTodos(items: List<Pair<Boolean, String>>) {
+        val raw = items.take(100).joinToString("\n") { (done, text) ->
+            val flag = if (done) '1' else '0'
+            flag + "|" + text.replace("\n", " ").take(240)
+        }
+        prefs.edit().putString(KEY_TODOS, raw).apply()
+    }
+
     private fun openEncrypted(context: Context): SharedPreferences {
         val masterKey = MasterKey.Builder(context)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
@@ -59,10 +78,12 @@ class CopilotPrefs(context: Context) {
     }
 
     companion object {
-        const val DEFAULT_MODEL = "gpt-4o-mini"
+        const val DEFAULT_MODEL = "llama3.2"
+        const val EMULATOR_OLLAMA_URL = "http://10.0.2.2:11434/v1"
         private const val KEY_MODE = "mode"
         private const val KEY_URL = "base_url"
         private const val KEY_API = "api_key"
         private const val KEY_MODEL = "model"
+        private const val KEY_TODOS = "todos"
     }
 }

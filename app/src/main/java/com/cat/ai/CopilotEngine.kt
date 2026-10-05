@@ -1,17 +1,23 @@
 package com.cat.ai
 
+import com.cat.tools.LocalTools
+
 /**
  * On-device assistant. It only sees text the caller passes in.
  * It does not read the phone, files, or accounts.
+ * Offline answers do not use the network.
  */
 class CopilotEngine(
-    private val filter: SensitiveFilter = SensitiveFilter()
+    private val filter: SensitiveFilter = SensitiveFilter(),
+    private val clockMillis: () -> Long = { System.currentTimeMillis() }
 ) {
     data class Prepared(val text: String, val filtered: Boolean)
 
     data class OfflineResult(
         val reply: String,
-        val memoryToSave: String? = null
+        val memoryToSave: String? = null,
+        val skipCloud: Boolean = true,
+        val todoToAdd: String? = null
     )
 
     fun prepare(raw: String): Prepared {
@@ -22,11 +28,15 @@ class CopilotEngine(
     fun respond(
         userText: String,
         recentChat: List<Pair<String, String>>,
-        memories: List<String>
+        memories: List<String>,
+        todos: List<String> = emptyList()
     ): OfflineResult {
         val clean = filter.sanitize(userText).trim()
         if (clean.isEmpty()) {
-            return OfflineResult("C@T here. Send a message and I'll work with it locally.")
+            return OfflineResult("C@T here. Send a message and I'll work with it locally. Wi-Fi is not required.")
+        }
+        if (clean.startsWith("/")) {
+            return slash(clean.drop(1).trim(), recentChat, memories, todos)
         }
         val lower = clean.lowercase()
 
@@ -40,6 +50,9 @@ class CopilotEngine(
         if (isRecall(lower)) {
             return OfflineResult(recallReply(memories))
         }
+        if (lower == "tools" || lower == "tool") {
+            return OfflineResult(TOOLS_REPLY)
+        }
         if (isSummarize(lower)) {
             return OfflineResult(summarizeReply(recentChat, clean))
         }
@@ -52,12 +65,118 @@ class CopilotEngine(
         if (isHelp(lower)) {
             return OfflineResult(HELP_REPLY)
         }
+        if (lower == "time" || lower == "clock" || lower.contains("perth time")) {
+            return OfflineResult(LocalTools.clockReport(clockMillis()))
+        }
         if (isGreeting(lower) && clean.length < 48) {
             return OfflineResult(
-                "C@T online, offline brain. Ask for help, say remember <fact>, or recall your notes."
+                "C@T offline, Australia/Perth, en-AU. Wi-Fi is not required. " +
+                    "Try /help, /remember <fact>, /recall, or /tools."
             )
         }
-        return OfflineResult(contextualReply(clean, recentChat, memories))
+        return OfflineResult(
+            reply = contextualReply(clean, recentChat, memories),
+            skipCloud = false
+        )
+    }
+
+    private fun slash(
+        body: String,
+        recentChat: List<Pair<String, String>>,
+        memories: List<String>,
+        todos: List<String>
+    ): OfflineResult {
+        if (body.isEmpty()) return OfflineResult(HELP_REPLY)
+        val cmd = body.substringBefore(' ').lowercase()
+        val arg = if (' ' in body) body.substringAfter(' ').trim() else ""
+        return when (cmd) {
+            "help" -> OfflineResult(HELP_REPLY)
+            "remember" -> {
+                val fact = filter.sanitize(arg.replace(Regex("(?i)^that\\s+"), ""))
+                    .trim()
+                    .trimEnd('.')
+                if (fact.isEmpty()) {
+                    OfflineResult("Say /remember tea is at 4")
+                } else {
+                    OfflineResult("Locked into local memory: $fact", memoryToSave = fact)
+                }
+            }
+            "recall", "notes", "memories" -> OfflineResult(recallReply(memories))
+            "tools", "tool" -> OfflineResult(TOOLS_REPLY)
+            "summarize", "summary" -> OfflineResult(summarizeReply(recentChat, body))
+            "settings", "setting" -> OfflineResult(SETTINGS_REPLY)
+            "fold" -> OfflineResult(FOLD_REPLY)
+            "time", "clock" -> OfflineResult(LocalTools.clockReport(clockMillis()))
+            "todo" -> todoReply(arg, todos)
+            "hash", "sha256", "sha" -> {
+                if (arg.isEmpty()) OfflineResult("Use /hash some text")
+                else OfflineResult("SHA-256:\n${LocalTools.sha256(arg)}")
+            }
+            "b64", "base64" -> {
+                if (arg.isEmpty()) OfflineResult("Use /b64 some text")
+                else OfflineResult(LocalTools.base64Encode(arg))
+            }
+            "b64d" -> {
+                if (arg.isEmpty()) {
+                    OfflineResult("Use /b64d <encoded>")
+                } else {
+                    val decoded = runCatching { LocalTools.base64Decode(arg) }.getOrElse {
+                        return OfflineResult("Could not decode that Base64.")
+                    }
+                    OfflineResult(decoded)
+                }
+            }
+            "json" -> {
+                if (arg.isEmpty()) {
+                    OfflineResult("Use /json {\"a\":1}")
+                } else {
+                    val pretty = runCatching { LocalTools.prettyJson(arg) }.getOrElse {
+                        return OfflineResult("Could not pretty-print that JSON.")
+                    }
+                    OfflineResult(pretty)
+                }
+            }
+            "convert" -> convertReply(arg)
+            "pass", "passphrase" -> {
+                val n = arg.toIntOrNull() ?: 16
+                val generated = LocalTools.generatePassphrase(n)
+                OfflineResult("Passphrase ($n): $generated")
+            }
+            "strength" -> {
+                if (arg.isEmpty()) {
+                    OfflineResult("Use /strength followed by the phrase to score.")
+                } else {
+                    val strength = LocalTools.passphraseStrength(arg)
+                    OfflineResult("Strength ${strength.score}/4 ${strength.label} (length ${arg.length}).")
+                }
+            }
+            "call", "dial", "sms", "text", "msg" -> OfflineResult(
+                "Use /call 0412345678 or /sms 0412345678 your draft. " +
+                    "C@T opens your phone's dialer or SMS app only. It does not call or text by itself."
+            )
+            else -> OfflineResult("Unknown command /$cmd. Try /help")
+        }
+    }
+
+    private fun todoReply(arg: String, todos: List<String>): OfflineResult {
+        if (arg.isBlank()) {
+            if (todos.isEmpty()) {
+                return OfflineResult("Checklist is empty. Add one with /todo buy milk, or use the Tools tab.")
+            }
+            return OfflineResult("Checklist:\n" + todos.joinToString("\n") { "- $it" })
+        }
+        return OfflineResult("Added to checklist: $arg", todoToAdd = arg)
+    }
+
+    private fun convertReply(arg: String): OfflineResult {
+        val parts = arg.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+        if (parts.size < 3) return OfflineResult("Use /convert 10 km mi")
+        val value = parts[0].toDoubleOrNull() ?: return OfflineResult("Need a number first. Example: /convert 10 km mi")
+        val result = LocalTools.convert(value, parts[1], parts[2])
+            ?: return OfflineResult("Unknown units. Try km, m, mi, ft, kg, lb, C, F.")
+        return OfflineResult(
+            "${LocalTools.formatAmount(value)} ${parts[1]} = ${LocalTools.formatAmount(result)} ${parts[2]}"
+        )
     }
 
     private fun rememberFact(clean: String): String? {
@@ -105,7 +224,7 @@ class CopilotEngine(
 
     private fun recallReply(memories: List<String>): String {
         if (memories.isEmpty()) {
-            return "Local memory is empty. Say remember <fact> and I'll keep it in this app only."
+            return "Local memory is empty. Say /remember <fact> and I'll keep it in this app only."
         }
         val lines = memories.take(8).joinToString("\n") { "- $it" }
         return "C@T local memory:\n$lines"
@@ -141,10 +260,11 @@ class CopilotEngine(
         }.take(3)
 
         if (noteHits.isEmpty() && chatHits.isEmpty()) {
-            return "C@T offline. No matching note for \"${clean.take(80)}\". " +
-                "Try remember <fact>, recall, summarize, or help. Cloud is optional in Settings."
+            return "C@T offline (Australia/Perth). No matching note for \"${clean.take(80)}\". " +
+                "Try /remember <fact>, /recall, /tools, or /help. Wi-Fi is not required. " +
+                "Cloud is optional in Settings and falls back here if it cannot connect."
         }
-        val parts = mutableListOf("C@T offline.")
+        val parts = mutableListOf("C@T offline (Australia/Perth).")
         if (noteHits.isNotEmpty()) {
             parts.add("Matched notes:\n" + noteHits.joinToString("\n") { "- $it" })
         }
@@ -161,31 +281,63 @@ class CopilotEngine(
 
     companion object {
         private val REMEMBER = Regex("(?i)^(?:please\\s+)?remember(?:\\s+that)?\\s+(.+)$")
-        private val GREETING = Regex("(?i)^(hi|hey|hello|yo|good morning|good evening|good night)\\b")
+        private val GREETING = Regex("(?i)^(hi|hey|hello|yo|good morning|good evening|good night|g'day)\\b")
         private val STOP = setOf(
             "where", "what", "when", "which", "your", "this", "that", "have", "with",
             "from", "about", "does", "like", "tell", "please", "want", "need", "into",
             "there", "here", "would", "could", "should", "just", "them", "they", "then"
         )
         private val HELP_REPLY = """
-            C@T can do this on the phone, no scan:
-            - remember <fact> saves a local note
-            - recall or my notes reads them back
-            - summarize recaps this thread
-            - settings explains Offline, Cloud, and Auto
-            - fold explains the cover vs inner layout
-            Offline is the default. Cloud only runs if you add a URL and key.
+            C@T offline mode. Australia/Perth, en-AU. Wi-Fi is not required.
+            Commands:
+            - /help
+            - /remember <fact>
+            - /recall
+            - /tools
+            - /summarize
+            - /settings
+            - /fold
+            - /time
+            - /todo <item>
+            - /hash <text>
+            - /b64 <text>
+            - /json <json>
+            - /convert 10 km mi
+            - /pass 16
+            - /call 0412345678 opens your dialer
+            - /sms 0412345678 your draft opens your SMS app
+            You can also type remember, recall, summarize, or help without a slash.
+            C@T does not send texts or place calls. Your phone's own apps do that if you confirm.
+            There is no separate message network and no paid API. Cloud is optional and falls back offline.
         """.trimIndent()
         private val SETTINGS_REPLY = """
-            Offline is the default and stays on this device.
-            Cloud sends the filtered thread to an OpenAI-compatible URL you set.
-            Auto tries Cloud, then falls back to Offline.
+            Offline is the default and stays on this device. It does not wait for Wi-Fi.
+            Cloud and Auto can use a network when one is available, then fall back offline.
+            Point the base URL at a free local Ollama server if you want that. No paid API is required.
+            Emulator host preset is 10.0.2.2.
             The API key is stored in encrypted preferences on the phone. C@T never reads other apps.
         """.trimIndent()
         private val FOLD_REPLY = """
             Cover screen (under 600dp) is one column. The inner display uses multiple columns.
             Launch opens this chat. Tabs scroll if the cover is tight.
             Same APK, no phone scan, on both screens.
+        """.trimIndent()
+        private val TOOLS_REPLY = """
+            Tools tab, all on this phone, no network:
+            - Notes
+            - Clipboard scrubber
+            - Passphrase strength
+            - Unit converter
+            - World clock (Australia/Perth first, en-AU)
+            - Passphrase generator
+            - Base64
+            - JSON pretty
+            - SHA-256
+            - Timer
+            - Checklist
+            - Call or text via your own dialer and SMS app
+            Chat: /time /hash /b64 /json /convert /pass /todo /call /sms
+            C@T does not run a carrier-free message network.
         """.trimIndent()
     }
 }
