@@ -387,8 +387,8 @@ class CopilotEngine(
         todos: List<String> = emptyList(),
         memoryTags: List<String> = emptyList(),
         persona: AiPersona = AiPersona.OFFLINE_CAT,
-        versionName: String = "1.11",
-        versionCode: Int = 16,
+        versionName: String = "1.12",
+        versionCode: Int = 17,
         online: Boolean = false,
         privateMode: Boolean = false
     ): TerminalOutcome {
@@ -642,7 +642,7 @@ class CopilotEngine(
             You set each note True, False, or Unsure. C@T does not decide that and is not a lie detector.
             Confidence words and /remember can add a short note to the evolving memory feed, tagged Unsure until you change it.
             Autopilot on the chat strip speaks replies and one follow-up, then waits.
-            Evolve writes a short best-so-far note from this chat. Online evolve (optional) uses public Wikipedia only — never browser history.
+            Evolve writes a short best-so-far note from this chat when you send. Online evolve is an optional toggle and runs only then. It does not scan in the background and does not update this app.
             Offline answers name the tag on notes your words match.
             C@T does not send texts or place calls. Your phone's own apps do that if you confirm.
             There is no separate message network and no paid API. Cloud is optional and falls back offline.
@@ -698,7 +698,7 @@ class CopilotEngine(
 
             Typo repair fixes the command word, including near-misses (hlp, helpx, remeberr, stattus, unlck). Ordinary sentences stay as typed.
             Every reply ranks Room memories that share your words (True tags rise), shows a short used-N hint, then recent vault lines.
-            The algorithm rail lights INPUT, CORRECT, MEMORY, then REPLY. PRIVATE lights only when Private is on. It is a trace, not a self-build.
+            The evolve path lights YOU, SoftCorrect, MEMORY, REPLY, then EVOLVE when a note is saved. PRIVATE lights only when Private is on. It is a trace on screen, not a self-update.
             Terminal voice defaults to Analyst. Coder, Coach, or Creative apply when the Wheel names them.
             Cloud is optional in Settings. Offline still answers.
             The PIN lock is separate from Chat. This transcript is AES-GCM and never writes chat history.

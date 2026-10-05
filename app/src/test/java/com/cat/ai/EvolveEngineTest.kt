@@ -38,6 +38,27 @@ class EvolveEngineTest {
     }
 
     @Test
+    fun bestSoFarKeepsUserSlang() {
+        val chat = listOf(
+            "user" to "yeah heaps keen for arvo tea",
+            "assistant" to "noted"
+        )
+        val result = EvolveEngine.bestSoFar(chat, emptyList())
+        assertNotNull(result)
+        assertTrue(result!!.summary.contains("style:"))
+        assertTrue(result.summary.contains("heaps"))
+        assertTrue(result.summary.contains("arvo"))
+        assertTrue(result.summary.length <= 200)
+        assertTrue(result.statusLine.contains("style"))
+    }
+
+    @Test
+    fun captureStyleIgnoresPlainSentences() {
+        val style = EvolveEngine.captureStyle(listOf("the meeting is on tuesday"))
+        assertTrue(style.isEmpty())
+    }
+
+    @Test
     fun rankTopicsSkipsStopWords() {
         val ranked = EvolveEngine.rankTopics(
             listOf("the meeting is in the lab", "meeting notes for lab")

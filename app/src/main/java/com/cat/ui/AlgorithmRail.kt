@@ -76,10 +76,26 @@ fun AlgorithmScanBackdrop(modifier: Modifier = Modifier) {
 }
 
 fun algorithmSteps(privateOn: Boolean): List<String> {
-    return if (privateOn) {
-        listOf("INPUT", "CORRECT", "MEMORY", "PRIVATE", "REPLY")
-    } else {
-        listOf("INPUT", "CORRECT", "MEMORY", "REPLY")
+    val head = listOf("YOU", "SoftCorrect", "MEMORY")
+    val tail = listOf("REPLY", "EVOLVE")
+    return if (privateOn) head + "PRIVATE" + tail else head + tail
+}
+
+/** One-line design copy for the step that is lit. Visual only. */
+fun evolveStepDetail(step: String?, saved: String?): String {
+    return when (step) {
+        "YOU" -> "YOU — your words. Nothing else runs until you send."
+        "SoftCorrect" -> "SoftCorrect — command typos get a light fix. Sentences stay yours."
+        "MEMORY" -> "MEMORY — saved notes that share your words are ranked, then used."
+        "PRIVATE" -> "PRIVATE — this screen stays on the phone. Cloud stays off."
+        "REPLY" -> "REPLY — an English answer, then it waits for you."
+        "EVOLVE" -> if (saved.isNullOrBlank()) {
+            "Evolve note — a short note, including phrases you actually use. Not a self-update."
+        } else {
+            "Evolve note — $saved"
+        }
+        else -> saved?.let { "Evolve note — $it" }
+            ?: "YOU → SoftCorrect → MEMORY → REPLY → Evolve note. On screen only. This app does not update itself."
     }
 }
 
@@ -132,7 +148,7 @@ fun AlgorithmRail(steps: List<String>, active: Int, modifier: Modifier = Modifie
                     color = fg,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = if (hot) FontWeight.Bold else FontWeight.Medium,
-                    fontSize = 9.sp,
+                    fontSize = 8.sp,
                     maxLines = 1
                 )
             }
@@ -151,7 +167,7 @@ fun AlgorithmRailVertical(steps: List<String>, active: Int, modifier: Modifier =
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Text(
-            "TRACE",
+            "PATH",
             color = NeonLime,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
@@ -178,5 +194,48 @@ fun AlgorithmRailVertical(steps: List<String>, active: Int, modifier: Modifier =
                 )
             }
         }
+    }
+}
+
+/** Compact evolve-path design. Lights the same steps as the rail. */
+@Composable
+fun EvolvePathPanel(
+    steps: List<String>,
+    active: Int,
+    evolveNote: String?,
+    wide: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .border(1.dp, NeonCyan.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
+            .background(Color(0xFF06100B), RoundedCornerShape(8.dp))
+            .padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            "Evolve path",
+            color = NeonLime,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+            fontSize = 12.sp
+        )
+        Text(
+            "YOU → SoftCorrect → MEMORY → REPLY → Evolve note",
+            color = NeonCyan,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 11.sp
+        )
+        if (!wide) {
+            AlgorithmRail(steps = steps, active = active)
+        }
+        val step = steps.getOrNull(active)
+        Text(
+            evolveStepDetail(step, evolveNote),
+            color = if (step == "EVOLVE" || !evolveNote.isNullOrBlank() && step == null) NeonLime else Color(0xFFB8E0C8),
+            fontFamily = FontFamily.Monospace,
+            fontSize = 12.sp
+        )
     }
 }

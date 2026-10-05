@@ -33,7 +33,7 @@ class CopilotRepository(
 
     suspend fun history(): List<ChatMessage> = database.chatDao().getAll()
 
-    data class TerminalAnswer(val reply: String, val notice: String?, val clearVault: Boolean = false)
+    data class TerminalAnswer(val reply: String, val notice: String?, val clearVault: Boolean = false, val evolveNote: String? = null)
 
     data class TerminalFace(
         val online: Boolean,
@@ -54,7 +54,8 @@ class CopilotRepository(
     /**
      * English AI reply for the locked terminal screen.
      * Uses Room memories and the vault lines the caller passes.
-     * Does not write ChatDao, does not evolve, and does not search the web.
+     * May save one offline "best so far" note. Does not write ChatDao,
+     * does not search the web, and does not update the app.
      */
     suspend fun answerTerminal(
         userText: String,
@@ -93,24 +94,54 @@ class CopilotRepository(
         if (!outcome.todoToAdd.isNullOrBlank()) {
             prefs.saveTodos(prefs.loadTodos() + (false to outcome.todoToAdd))
         }
+        val finalReply: String
+        val notice: String?
         if (privateMode || outcome.clearVault || outcome.skipCloud) {
-            val notice = if (privateMode) "Private. Offline only. No cloud." else null
-            return TerminalAnswer(outcome.reply, notice, outcome.clearVault)
-        }
-        val offline = CopilotEngine.OfflineResult(
-            reply = outcome.reply,
-            memoryToSave = outcome.memoryToSave,
-            skipCloud = false,
-            todoToAdd = outcome.todoToAdd
-        )
-        val history = prior + ("user" to prepared.text)
-        val (reply, notice) = resolveTerminal(outcome.reply, offline, persona, history)
-        val finalReply = if (reply == outcome.reply) {
-            reply
+            finalReply = outcome.reply
+            notice = if (privateMode) "Private. Offline only. No cloud." else null
         } else {
-            engine.attachTerminalContext(reply, prior, lines, tags)
+            val offline = CopilotEngine.OfflineResult(
+                reply = outcome.reply,
+                memoryToSave = outcome.memoryToSave,
+                skipCloud = false,
+                todoToAdd = outcome.todoToAdd
+            )
+            val history = prior + ("user" to prepared.text)
+            val resolved = resolveTerminal(outcome.reply, offline, persona, history)
+            notice = resolved.second
+            finalReply = if (resolved.first == outcome.reply) {
+                resolved.first
+            } else {
+                engine.attachTerminalContext(resolved.first, prior, lines, tags)
+            }
         }
-        return TerminalAnswer(finalReply, notice, false)
+        val evolveNote = if (outcome.clearVault) {
+            null
+        } else {
+            localEvolveNote(prior + ("user" to prepared.text) + ("assistant" to finalReply))
+        }
+        return TerminalAnswer(finalReply, notice, outcome.clearVault, evolveNote)
+    }
+
+    /**
+     * One offline evolve note from this turn. Never opens the network.
+     * Returns null when there is nothing new worth keeping.
+     */
+    private suspend fun localEvolveNote(chat: List<Pair<String, String>>): String? {
+        val memories = database.memoryDao().getAll().map { it.content }
+        val evolved = EvolveEngine.bestSoFar(chat, memories) ?: return null
+        val lastBest = memories.firstOrNull { it.startsWith("best so far:", ignoreCase = true) }
+        if (lastBest != evolved.summary) {
+            database.memoryDao().insert(
+                MemoryEntity(
+                    content = evolved.summary,
+                    category = "evolve",
+                    createdAt = System.currentTimeMillis(),
+                    truthTag = TruthTag.UNSURE
+                )
+            )
+        }
+        return evolved.summary.take(120)
     }
 
     suspend fun clear(): Turn {
@@ -273,6 +304,8 @@ class CopilotRepository(
 
     /**
      * Offline "best so far" evolve + optional public online lookup.
+     * Online lookup runs only for this send when the toggle is on.
+     * Never scheduled, never while asleep, never a self-update.
      * Never reads browser history, OneDrive, or other apps.
      */
     private suspend fun finishEvolve(

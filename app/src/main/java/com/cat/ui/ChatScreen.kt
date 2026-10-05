@@ -421,6 +421,11 @@ private fun SystemStrip(
                 StatusChip("Wheel", NeonCyan, onClick = onOpenWheel)
             }
         }
+        Text(
+            "Online evolve runs only when you send. Not in the background. This app does not update itself.",
+            color = Color(0xFF8FB8A0),
+            fontSize = 11.sp
+        )
         Row(
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(6.dp),

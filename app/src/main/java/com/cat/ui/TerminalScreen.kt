@@ -19,9 +19,11 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -46,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cat.BuildConfig
 import com.cat.CAtApplication
+import com.cat.ai.CopilotMode
 import com.cat.data.TerminalLine
 import com.cat.security.SoftCorrect
 import com.cat.security.TerminalLock
@@ -234,7 +237,7 @@ private fun welcomeLines(): List<TerminalLine> {
         clear asks first. /clear yes wipes this vault only. Chat stays.
         Voice defaults to Analyst. Typos on those commands are repaired.
         Replies rank saved memories that share your words and say how many were used.
-        Algorithm rail traces INPUT, CORRECT, MEMORY, then REPLY. PRIVATE lights when Private is on. Trace only — this app does not rewrite itself.
+        Evolve path: YOU, SoftCorrect, MEMORY, REPLY, then an Evolve note when one is saved. Trace only — this app does not update itself.
         Private ON stays offline, blocks cloud, and hides this screen in recents.
         Chat stays a separate tab. PIN lock stays on this transcript.
     """.trimIndent()
@@ -260,6 +263,10 @@ private fun TerminalConsole(
     var railActive by remember { mutableStateOf(-1) }
     var stepLabel by remember { mutableStateOf<String?>(null) }
     var confirmClear by remember { mutableStateOf(false) }
+    var evolveLine by remember { mutableStateOf<String?>(null) }
+    var askAuto by remember { mutableStateOf(false) }
+    var autoNote by remember { mutableStateOf<String?>(null) }
+    var modeLabel by remember { mutableStateOf(app.prefs.mode.label) }
 
     suspend fun refreshFace() {
         val snap = runCatching { app.copilot.terminalFace() }.getOrNull()
@@ -302,9 +309,9 @@ private fun TerminalConsole(
                 stepLabel = name
                 delay(120)
             }
-            light("INPUT")
+            light("YOU")
             val fixed = SoftCorrect.apply(raw)
-            light("CORRECT")
+            light("SoftCorrect")
             val now = System.currentTimeMillis()
             val prior = lines.filter { it.role == "you" || it.role == "cat" }
                 .map { (if (it.role == "you") "user" else "assistant") to it.text }
@@ -329,7 +336,7 @@ private fun TerminalConsole(
                     null
                 )
             }
-            railActive = steps.lastIndex
+            railActive = steps.indexOf("REPLY").let { if (it < 0) steps.lastIndex else it }
             stepLabel = "REPLY"
             val catLine = TerminalLine("cat", answer.reply, System.currentTimeMillis())
             lines = if (answer.clearVault) {
@@ -342,7 +349,14 @@ private fun TerminalConsole(
             notice = answer.notice
             app.terminalVault.save(lines)
             refreshFace()
-            delay(480)
+            if (!answer.evolveNote.isNullOrBlank()) {
+                evolveLine = answer.evolveNote
+                light("EVOLVE")
+                delay(640)
+            } else {
+                evolveLine = null
+                delay(360)
+            }
             stepLabel = null
             railActive = -1
             busy = false
@@ -398,6 +412,15 @@ private fun TerminalConsole(
             )
             if (privateOn) PrivateBadge()
             OutlinedButton(onClick = {
+                if (privateOn) {
+                    askAuto = true
+                } else {
+                    app.prefs.mode = CopilotMode.AUTO
+                    modeLabel = CopilotMode.AUTO.label
+                    autoNote = "Auto is on. Cloud only if an address is saved. Otherwise this stays offline."
+                }
+            }) { Text(if (modeLabel == "Auto") "Auto on" else "Auto", color = NeonCyan) }
+            OutlinedButton(onClick = {
                 app.terminalLock.lock()
                 onLock()
             }) { Text("Lock", color = NeonMagenta) }
@@ -408,19 +431,18 @@ private fun TerminalConsole(
             fontFamily = FontFamily.Monospace,
             fontSize = 12.sp
         )
-        if (stepLabel != null) {
+        EvolvePathPanel(
+            steps = if (busy) railSteps else algorithmSteps(privateOn),
+            active = railActive,
+            evolveNote = evolveLine,
+            wide = wide
+        )
+        if (!autoNote.isNullOrBlank()) {
             Text(
-                stepLabel!!,
+                autoNote!!,
                 color = NeonLime,
                 fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold,
                 fontSize = 12.sp
-            )
-        }
-        if (!wide) {
-            AlgorithmRail(
-                steps = if (busy) railSteps else algorithmSteps(privateOn),
-                active = railActive
             )
         }
         Text(
@@ -513,6 +535,32 @@ private fun TerminalConsole(
         }
     }
 
+    if (askAuto) {
+        AlertDialog(
+            onDismissRequest = { askAuto = false },
+            title = { Text("Use Auto while Private is on?") },
+            text = {
+                Text("Auto tries a saved cloud address, then stays offline. Private blocks cloud. Turn Private off, or keep it and stay offline.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    app.prefs.mode = CopilotMode.AUTO
+                    modeLabel = CopilotMode.AUTO.label
+                    onPrivate(false)
+                    autoNote = "Auto is on. Private is off. Cloud only if an address is saved."
+                    askAuto = false
+                }) { Text("Turn Private off") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    app.prefs.mode = CopilotMode.AUTO
+                    modeLabel = CopilotMode.AUTO.label
+                    autoNote = "Auto is on. Private stays on, so replies stay offline."
+                    askAuto = false
+                }) { Text("Keep Private") }
+            }
+        )
+    }
     Box(
         modifier = Modifier
             .fillMaxSize()

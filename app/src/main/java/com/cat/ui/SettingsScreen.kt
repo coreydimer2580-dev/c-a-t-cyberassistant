@@ -11,7 +11,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -182,48 +181,50 @@ private fun CopilotSettings() {
     var model by remember { mutableStateOf(prefs.model) }
     var saved by remember { mutableStateOf("") }
 
-    Text("Copilot", color = NeonCyan, fontSize = 28.sp)
+    Text("How C@T answers", color = NeonCyan, fontSize = 28.sp)
     Text(
-        "Offline is the default (Australia/Perth, en-AU). It never waits on Wi-Fi. Cloud and Auto use a network only when one is available, then fall back offline.",
+        "Pick one. Offline never needs Wi-Fi. Cloud is used only if you already saved an address.",
         color = Color(0xFFBFE8FF)
     )
+    Button(
+        onClick = {
+            mode = CopilotMode.OFFLINE
+            prefs.mode = CopilotMode.OFFLINE
+            saved = "Offline only. No cloud."
+        },
+        modifier = Modifier.fillMaxWidth()
+    ) { Text("Use Offline only", fontSize = 18.sp) }
+    Button(
+        onClick = {
+            mode = CopilotMode.AUTO
+            prefs.mode = CopilotMode.AUTO
+            saved = if (baseUrl.isBlank()) {
+                "Auto is on. No cloud address yet, so replies stay offline."
+            } else {
+                "Auto is on. C@T tries the saved cloud, then stays offline if that fails."
+            }
+        },
+        modifier = Modifier.fillMaxWidth()
+    ) { Text("Try Cloud if set", fontSize = 18.sp) }
     Text(
-        "Autopilot (chat strip): speaks replies with TTS (en-AU) and one follow-up question, then waits for you.",
+        if (mode == CopilotMode.OFFLINE) "Now: offline only." else "Now: try cloud when an address is saved.",
         color = NeonLime
     )
     Text(
-        "Online evolve (chat strip): optional public Wikipedia / DuckDuckGo lookup only. Never reads browser history, OneDrive, or other apps.",
+        "Online evolve is a chat switch. It runs once when you send, never while the app sleeps, and it never updates this app.",
         color = NeonCyan
     )
-
     Text(
-        "Forever backup: memory stays on this phone. When you ask Grok Bot to backup, exports go to the Google Drive folder C@T-Memory. C@T does not upload by itself.",
-        color = NeonMagenta
-    )
-    Text(
-        "C@T hard save keeps notes until you clear them. You set True, False, or Unsure. C@T does not decide that.",
+        "Notes stay on this phone until you clear them. You set True, False, or Unsure.",
         color = Color(0xFFBFE8FF)
     )
-    Text(
-        if (prefs.encrypted) {
-            "API key is stored in encrypted preferences on this device. Leave it blank for a free local Ollama server."
-        } else {
-            "Encryption unavailable. The API key is in plain app preferences. Do not use a valuable key."
-        },
-        color = if (prefs.encrypted) NeonLime else NeonMagenta
-    )
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        CopilotMode.entries.forEach { item ->
-            FilterChip(
-                selected = mode == item,
-                onClick = {
-                    mode = item
-                    prefs.mode = item
-                    saved = "Mode ${item.label}"
-                },
-                label = { Text(item.label) }
-            )
-        }
+    var showCloud by remember { mutableStateOf(false) }
+    OutlinedButton(onClick = { showCloud = !showCloud }, modifier = Modifier.fillMaxWidth()) {
+        Text(if (showCloud) "Hide cloud address" else "Cloud address (optional)")
+    }
+    if (!showCloud) {
+        if (saved.isNotEmpty()) Text(saved, color = NeonLime)
+        return
     }
     OutlinedTextField(
         value = baseUrl,
@@ -262,10 +263,6 @@ private fun CopilotSettings() {
             saved = "Emulator host set to 10.0.2.2 for a free local Ollama. Mode stays ${mode.label} until you change it."
         }) { Text("Emulator 10.0.2.2") }
     }
-    Text(
-        "10.0.2.2 is the Android emulator's route to the computer running Ollama. On a real Fold 6, use that computer's LAN address instead. No paid API, no root, no custom ROM.",
-        color = Color(0xFFBFE8FF)
-    )
     if (saved.isNotEmpty()) {
         Text(saved, color = NeonLime)
     }
