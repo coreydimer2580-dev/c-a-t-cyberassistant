@@ -1,6 +1,15 @@
 package com.cat.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import com.cat.ui.theme.AccentState
+import com.cat.ui.theme.NeonAccent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -55,7 +64,9 @@ fun SettingsScreen(
     ) {
         HowItFits()
         CopilotSettings()
+        AccentPicker()
         TerminalPinSettings()
+        BackupReminderCard()
         if (onOpenTools != null) {
             OutlinedButton(onClick = onOpenTools) {
                 Text("More tools (/call · /sms · notes)", color = NeonCyan)
@@ -84,49 +95,104 @@ private fun HowItFits() {
 @Composable
 private fun TerminalPinSettings() {
     val app = LocalContext.current.applicationContext as CAtApplication
+    var step by remember { mutableStateOf(0) } // 0 idle, 1 current, 2 new, 3 confirm
     var current by remember { mutableStateOf("") }
     var next by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("") }
+    fun reset() { step = 0; current = ""; next = ""; confirm = "" }
     Text("Terminal lock", color = NeonCyan, fontSize = 22.sp)
     Text(
-        "Terminal is its own screen. The PIN is stored as a salted hash in encrypted preferences. The transcript is encrypted apart from Chat. Change it here any time (4–8 digits).",
+        "PIN is a salted hash in encrypted preferences. Change it in three quick steps (4–8 digits).",
         color = Color(0xFFBFE8FF)
     )
-    OutlinedTextField(
-        value = current,
-        onValueChange = { current = it.filter { ch -> ch.isDigit() }.take(8) },
-        modifier = Modifier.fillMaxWidth(),
-        label = { Text("Current PIN") },
-        visualTransformation = PasswordVisualTransformation()
-    )
-    OutlinedTextField(
-        value = next,
-        onValueChange = { next = it.filter { ch -> ch.isDigit() }.take(8) },
-        modifier = Modifier.fillMaxWidth(),
-        label = { Text("New PIN") },
-        visualTransformation = PasswordVisualTransformation()
-    )
-    OutlinedTextField(
-        value = confirm,
-        onValueChange = { confirm = it.filter { ch -> ch.isDigit() }.take(8) },
-        modifier = Modifier.fillMaxWidth(),
-        label = { Text("Confirm new PIN") },
-        visualTransformation = PasswordVisualTransformation()
-    )
-    Button(onClick = {
-        message = when (val result = app.terminalLock.changePin(current, next, confirm)) {
-            com.cat.security.TerminalLock.Change.Ok -> {
-                current = ""; next = ""; confirm = ""
-                "PIN updated. Terminal is locked until you unlock it."
-            }
-            com.cat.security.TerminalLock.Change.BadFormat -> "Use 4 to 8 digits."
-            com.cat.security.TerminalLock.Change.Mismatch -> "New PIN and confirm do not match."
-            is com.cat.security.TerminalLock.Change.Wrong -> "Current PIN was wrong. ${result.left} tries left."
-            is com.cat.security.TerminalLock.Change.Wait -> "Too many tries. Wait ${result.seconds}s."
+    if (step == 0) {
+        Button(onClick = { message = ""; step = 1 }) { Text("Change PIN") }
+    } else {
+        Text("Step $step of 3", color = NeonLime, fontWeight = FontWeight.Bold)
+        val label = when (step) { 1 -> "Current PIN"; 2 -> "New PIN (4–8 digits)"; else -> "Type the new PIN again" }
+        val value = when (step) { 1 -> current; 2 -> next; else -> confirm }
+        val setter: (String) -> Unit = { v -> when (step) { 1 -> current = v; 2 -> next = v; else -> confirm = v } }
+        OutlinedTextField(
+            value = value,
+            onValueChange = { setter(it.filter { ch -> ch.isDigit() }.take(8)) },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text(label) },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = {
+                message = ""
+                if (step == 1) reset() else step -= 1
+            }) { Text(if (step == 1) "Cancel" else "Back") }
+            Button(
+                enabled = value.length >= 4,
+                onClick = {
+                    message = ""
+                    when (step) {
+                        1 -> step = 2
+                        2 -> if (!com.cat.security.PinHash.isValidFormat(next)) message = "Use 4 to 8 digits." else step = 3
+                        else -> {
+                            message = when (val result = app.terminalLock.changePin(current, next, confirm)) {
+                                com.cat.security.TerminalLock.Change.Ok -> { reset(); "PIN updated. Terminal is locked until you unlock it with the new PIN." }
+                                com.cat.security.TerminalLock.Change.BadFormat -> { step = 2; next = ""; confirm = ""; "Use 4 to 8 digits." }
+                                com.cat.security.TerminalLock.Change.Mismatch -> { confirm = ""; "That didn't match. Type the new PIN again." }
+                                is com.cat.security.TerminalLock.Change.Wrong -> { step = 1; current = ""; "Current PIN was wrong. ${result.left} tries left." }
+                                is com.cat.security.TerminalLock.Change.Wait -> { reset(); "Too many tries. Wait ${result.seconds}s." }
+                            }
+                        }
+                    }
+                }
+            ) { Text(if (step == 3) "Save PIN" else "Next") }
         }
-    }) { Text("Change PIN") }
+    }
     if (message.isNotEmpty()) Text(message, color = NeonLime)
+}
+
+@Composable
+private fun AccentPicker() {
+    val app = LocalContext.current.applicationContext as CAtApplication
+    Text("Neon accent", color = NeonCyan, fontSize = 22.sp)
+    Text("Pick the main glow colour. Saved on this phone.", color = Color(0xFFBFE8FF))
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        NeonAccent.entries.forEach { accent ->
+            val selected = AccentState.current == accent
+            Text(
+                accent.label,
+                color = if (selected) Color.Black else accent.color,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(if (selected) accent.color else Color(0xFF0C0F14))
+                    .border(1.5.dp, accent.color, RoundedCornerShape(999.dp))
+                    .clickable {
+                        AccentState.current = accent
+                        app.prefs.accentId = accent.id
+                    }
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun BackupReminderCard() {
+    val app = LocalContext.current.applicationContext as CAtApplication
+    Text("Backup reminder", color = NeonCyan, fontSize = 22.sp)
+    Text(
+        com.cat.export.MemoryPdf.backupReminder(app.prefs.lastMemoryExport, System.currentTimeMillis()),
+        color = NeonLime
+    )
+    Text(
+        "Reminder only. Export from the Memory tab and choose Drive yourself in the share sheet. C@T has no Drive login and no auto upload.",
+        color = Color(0xFFBFE8FF),
+        fontSize = 12.sp
+    )
 }
 
 @Composable

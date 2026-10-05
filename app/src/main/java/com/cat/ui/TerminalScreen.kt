@@ -4,6 +4,10 @@ import android.app.Activity
 import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -268,6 +272,22 @@ private fun TerminalConsole(
     var askAuto by remember { mutableStateOf(false) }
     var autoNote by remember { mutableStateOf<String?>(null) }
     var modeLabel by remember { mutableStateOf(app.prefs.mode.label) }
+    var todos by remember { mutableStateOf(app.prefs.loadTodos()) }
+    var askClearVault by remember { mutableStateOf(false) }
+    var clock by remember { mutableStateOf(System.currentTimeMillis()) }
+    var todoFlash by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            clock = System.currentTimeMillis()
+            delay(15_000)
+        }
+    }
+    LaunchedEffect(todoFlash) {
+        if (todoFlash != null) {
+            delay(1400)
+            todoFlash = null
+        }
+    }
 
     suspend fun refreshFace() {
         val snap = runCatching { app.copilot.terminalFace() }.getOrNull()
@@ -349,6 +369,7 @@ private fun TerminalConsole(
                 answer.reply.contains("/clear yes", ignoreCase = true)
             notice = answer.notice
             app.terminalVault.save(lines)
+            todos = app.prefs.loadTodos()
             refreshFace()
             if (!answer.evolveNote.isNullOrBlank()) {
                 evolveLine = answer.evolveNote
@@ -427,7 +448,7 @@ private fun TerminalConsole(
             }) { Text("Lock", color = NeonMagenta) }
         }
         Text(
-            face,
+            "Perth ${perthClock(clock)} · $face",
             color = if (privateOn) NeonMagenta else NeonCyan,
             fontFamily = FontFamily.Monospace,
             fontSize = 12.sp
@@ -467,7 +488,7 @@ private fun TerminalConsole(
                 fontWeight = FontWeight.Bold,
                 fontSize = 12.sp
             )
-            PressButton(onClick = { send("/clear yes") }, enabled = !busy) {
+            PressButton(onClick = { askClearVault = true }, enabled = !busy) {
                 Text("Clear vault")
             }
         }
@@ -503,6 +524,29 @@ private fun TerminalConsole(
                 }
             }
         }
+        TodoChips(
+            todos = todos,
+            flash = todoFlash,
+            enabled = !busy,
+            onToggle = { index ->
+                val next = todos.mapIndexed { i, pair -> if (i == index) !pair.first to pair.second else pair }
+                todos = next
+                app.prefs.saveTodos(next)
+                val item = next[index]
+                todoFlash = if (item.first) "✓ ${item.second}" else "↺ ${item.second}"
+            },
+            onAdd = {
+                val text = draft.trim()
+                if (text.isNotEmpty()) {
+                    val next = todos + (false to text.take(240))
+                    todos = next
+                    app.prefs.saveTodos(next)
+                    draft = ""
+                    todoFlash = "+ $text"
+                }
+            },
+            canAdd = draft.isNotBlank()
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             commandChips.forEach { chip ->
                 OutlinedButton(
@@ -536,6 +580,15 @@ private fun TerminalConsole(
         }
     }
 
+    if (askClearVault) {
+        ConfirmClearDialog(
+            title = "Clear the Terminal vault?",
+            body = "This wipes the encrypted Terminal transcript only. Chat, Memory, and to-dos stay.",
+            confirmLabel = "Clear vault",
+            onConfirm = { send("/clear yes") },
+            onDismiss = { askClearVault = false }
+        )
+    }
     if (askAuto) {
         AlertDialog(
             onDismissRequest = { askAuto = false },
@@ -604,4 +657,59 @@ private fun TerminalConsole(
             }
         }
     }
+}
+
+
+/** v1.16: open to-dos as tappable chips. Tap = done/undo. "+ todo" saves the typed line. */
+@Composable
+private fun TodoChips(
+    todos: List<Pair<Boolean, String>>,
+    flash: String?,
+    enabled: Boolean,
+    onToggle: (Int) -> Unit,
+    onAdd: () -> Unit,
+    canAdd: Boolean
+) {
+    val open = todos.withIndex().filter { !it.value.first }
+    val done = todos.withIndex().filter { it.value.first }
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            if (open.isEmpty()) "todo ✓ all clear" else "todo ${open.size}",
+            color = NeonLime,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+            fontSize = 11.sp
+        )
+        open.take(8).forEach { (index, item) ->
+            TodoChip("○ ${item.second.take(28)}", NeonCyan, filled = false, enabled = enabled) { onToggle(index) }
+        }
+        done.takeLast(3).forEach { (index, item) ->
+            TodoChip("✓ ${item.second.take(20)}", Color(0xFF5E7A6A), filled = false, enabled = enabled) { onToggle(index) }
+        }
+        TodoChip("+ todo", NeonLime, filled = canAdd, enabled = enabled && canAdd, onClick = onAdd)
+    }
+    if (flash != null) {
+        Text(flash, color = NeonLime, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun TodoChip(label: String, accent: Color, filled: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    Text(
+        label,
+        color = if (filled) Color.Black else accent,
+        fontFamily = FontFamily.Monospace,
+        fontSize = 11.sp,
+        maxLines = 1,
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(if (filled) accent else Color(0xFF0B110D))
+            .border(1.dp, accent.copy(alpha = 0.7f), RoundedCornerShape(999.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+    )
 }

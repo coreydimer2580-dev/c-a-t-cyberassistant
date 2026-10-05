@@ -52,6 +52,7 @@ class CAtApplication : Application() {
         ) {
             prefs.mode = com.cat.ai.CopilotMode.OFFLINE
         }
+        com.cat.ui.theme.AccentState.current = com.cat.ui.theme.NeonAccent.fromId(prefs.accentId)
         copilot = CopilotRepository(database, prefs, networkAvailable = { hasNetwork() })
         terminalLock = TerminalLock(prefs)
         terminalVault = TerminalVault(applicationContext, prefs)

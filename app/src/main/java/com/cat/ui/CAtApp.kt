@@ -40,6 +40,8 @@ import androidx.navigation.compose.rememberNavController
 import com.cat.ProductGuide
 import com.cat.ui.theme.CATTheme
 import com.cat.ui.theme.CatWordmark
+import com.cat.ui.theme.FoldInk
+import com.cat.ui.theme.FoldRail
 import com.cat.ui.theme.NeonCyan
 import com.cat.ui.theme.NeonLime
 import com.cat.ui.theme.NeonMagenta
@@ -104,16 +106,23 @@ fun CAtApp() {
             color = Color.Black
         ) {
             if (wide) {
-                Row(modifier = Modifier.fillMaxSize()) {
+                Row(modifier = Modifier.fillMaxSize().background(FoldInk)) {
                     NeonSidebar(
                         tabs = tabs,
                         selectedTab = selectedTab,
                         onSelect = { openTab(it) }
                     )
+                    androidx.compose.foundation.layout.Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .fillMaxHeight()
+                            .background(NeonCyan.copy(alpha = 0.18f))
+                    )
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .padding(16.dp)
+                            .background(FoldInk)
+                            .padding(horizontal = 20.dp, vertical = 16.dp)
                     ) {
                         AppNav(
                             navController = navController,
@@ -196,20 +205,20 @@ private fun NeonSidebar(
 ) {
     Column(
         modifier = Modifier
-            .width(188.dp)
+            .width(196.dp)
             .fillMaxHeight()
-            .background(Panel)
+            .background(FoldRail)
             .padding(14.dp)
     ) {
         CatWordmark(size = 40.sp)
         Text(ProductGuide.VERSION_LABEL, color = NeonLime, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        Text(ProductGuide.PATH, color = NeonMagenta, fontSize = 11.sp, modifier = Modifier.padding(bottom = 16.dp))
+        Text(ProductGuide.PATH, color = NeonMagenta.copy(alpha = 0.8f), fontSize = 11.sp, modifier = Modifier.padding(bottom = 16.dp))
         tabs.forEachIndexed { index, title ->
             SideItem(
                 label = title,
                 selected = selectedTab == index,
                 accent = when (index) {
-                    0 -> NeonLime
+                    0 -> NeonCyan
                     1 -> NeonCyan
                     2 -> NeonCyan
                     3 -> NeonMagenta

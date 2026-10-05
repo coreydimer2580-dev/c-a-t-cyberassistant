@@ -1,6 +1,17 @@
 package com.cat.ui
 
 import android.widget.Toast
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.offset
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import com.cat.export.MemoryPdf
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -93,7 +104,34 @@ fun MemoryScreen(stacks: List<MemoryStack>, wide: Boolean) {
         }
         Unit
     }
-    val onClear: () -> Unit = {
+    val app = context.applicationContext as CAtApplication
+    var askClear by remember { mutableStateOf(false) }
+    var lastExport by remember { mutableLongStateOf(app.prefs.lastMemoryExport) }
+    val onExport: () -> Unit = {
+        scope.launch {
+            runCatching {
+                val all = notes
+                val file = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    MemoryPdf.write(context, all)
+                }
+                context.startActivity(MemoryPdf.shareIntent(context, file).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                val now = System.currentTimeMillis()
+                app.prefs.lastMemoryExport = now
+                lastExport = now
+                status = "PDF ready (${all.size} notes). Pick where it goes. Nothing uploads by itself."
+            }.onFailure { status = "Export failed: ${it.message ?: "unknown"}" }
+        }
+        Unit
+    }
+    val onSwipeTag: (MemoryEntity, String) -> Unit = { note, next ->
+        scope.launch {
+            runCatching { dao.updateTruthTag(note.id, next) }
+                .onSuccess { status = "Tagged $next." }
+                .onFailure { status = it.message ?: "Tag update failed" }
+        }
+        Unit
+    }
+    val doClear: () -> Unit = {
         scope.launch {
             runCatching {
                 dao.clearAll()
@@ -101,6 +139,16 @@ fun MemoryScreen(stacks: List<MemoryStack>, wide: Boolean) {
             }.onFailure { status = it.message ?: "Clear failed" }
         }
         Unit
+    }
+    val onClear: () -> Unit = { askClear = true }
+    if (askClear) {
+        ConfirmClearDialog(
+            title = "Clear all memory?",
+            body = "This deletes all ${notes.size} notes on this phone. Export a PDF first if you want a copy. This can't be undone.",
+            confirmLabel = "Clear all",
+            onConfirm = doClear,
+            onDismiss = { askClear = false }
+        )
     }
     val onRetag: (MemoryEntity) -> Unit = { note ->
         scope.launch {
@@ -127,7 +175,10 @@ fun MemoryScreen(stacks: List<MemoryStack>, wide: Boolean) {
         onTag = { tag = it },
         onAdd = onAdd,
         onClear = onClear,
-        onRetag = onRetag
+        onRetag = onRetag,
+        onExport = onExport,
+        onSwipeTag = onSwipeTag,
+        reminder = MemoryPdf.backupReminder(lastExport, System.currentTimeMillis())
     )
 }
 
@@ -144,7 +195,10 @@ private fun NotesPane(
     onTag: (String) -> Unit,
     onAdd: () -> Unit,
     onClear: () -> Unit,
-    onRetag: (MemoryEntity) -> Unit
+    onRetag: (MemoryEntity) -> Unit,
+    onExport: () -> Unit,
+    onSwipeTag: (MemoryEntity, String) -> Unit,
+    reminder: String
 ) {
     val styleIds = notes.filter { note ->
         val body = note.content.trim()
@@ -186,8 +240,15 @@ private fun NotesPane(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = onAdd) { Text("Add") }
-            Button(onClick = onClear) { Text("Clear") }
+            OutlinedButton(onClick = onExport) { Text("Export PDF", color = NeonCyan) }
+            OutlinedButton(onClick = onClear) { Text("Clear", color = NeonMagenta) }
         }
+        Text(reminder, color = NeonLime, fontSize = 12.sp)
+        Text(
+            "Swipe a card: far right = True · far left = False · short swipe = Unsure.",
+            color = Color(0xFF8FB8A0),
+            fontSize = 12.sp
+        )
         if (status.isNotEmpty()) {
             Text(status, color = NeonLime)
         }
@@ -209,7 +270,7 @@ private fun NotesPane(
                 item { Text("No style notes yet. Type the way you talk in Terminal or Chat.", color = Color(0xFFBFE8FF)) }
             }
             items(styleNotes, key = { "style-${it.id}" }) { note ->
-                NoteCard(note, note.id == flashId, onRetag)
+                NoteCard(note, note.id == flashId, onRetag, onSwipeTag)
             }
             item {
                 Text("Evolving memory", color = NeonMagenta, fontWeight = FontWeight.Black, fontSize = 18.sp)
@@ -223,20 +284,56 @@ private fun NotesPane(
                 item { Text("No evolving notes yet.", color = Color(0xFFBFE8FF)) }
             }
             items(evolving, key = { "learn-${it.id}" }) { note ->
-                NoteCard(note, note.id == flashId, onRetag)
+                NoteCard(note, note.id == flashId, onRetag, onSwipeTag)
             }
             item { Text("All hard-saved notes", color = NeonCyan, fontWeight = FontWeight.Bold) }
             items(hard, key = { "hard-${it.id}" }) { note ->
-                NoteCard(note, note.id == flashId, onRetag)
+                NoteCard(note, note.id == flashId, onRetag, onSwipeTag)
             }
         }
     }
 }
 
 @Composable
-private fun NoteCard(note: MemoryEntity, hot: Boolean, onRetag: (MemoryEntity) -> Unit) {
+private fun NoteCard(
+    note: MemoryEntity,
+    hot: Boolean,
+    onRetag: (MemoryEntity) -> Unit,
+    onSwipeTag: (MemoryEntity, String) -> Unit
+) {
+    val density = LocalDensity.current
+    val farPx = with(density) { 120.dp.toPx() }
+    val nearPx = with(density) { 48.dp.toPx() }
+    var dragX by remember(note.id) { mutableFloatStateOf(0f) }
+    val preview = swipeTarget(dragX, nearPx, farPx)
+    val previewColor = when (preview) {
+        TruthTag.TRUE -> NeonLime
+        TruthTag.FALSE -> NeonMagenta
+        TruthTag.UNSURE -> NeonCyan
+        else -> null
+    }
+    Box(modifier = Modifier.fillMaxWidth()) {
+    if (preview != null && previewColor != null) {
+        Text(
+            "→ $preview",
+            color = previewColor,
+            fontWeight = FontWeight.Black,
+            modifier = Modifier
+                .align(if (dragX > 0) androidx.compose.ui.Alignment.CenterStart else androidx.compose.ui.Alignment.CenterEnd)
+                .padding(horizontal = 16.dp)
+        )
+    }
     Column(
         modifier = Modifier
+            .offset { IntOffset(dragX.roundToInt(), 0) }
+            .draggable(
+                orientation = Orientation.Horizontal,
+                state = rememberDraggableState { delta -> dragX = (dragX + delta).coerceIn(-farPx * 1.6f, farPx * 1.6f) },
+                onDragStopped = {
+                    swipeTarget(dragX, nearPx, farPx)?.let { onSwipeTag(note, it) }
+                    dragX = 0f
+                }
+            )
             .fillMaxWidth()
             .neonCard(
                 accent = if (hot) NeonLime else NeonCyan,
@@ -257,6 +354,15 @@ private fun NoteCard(note: MemoryEntity, hot: Boolean, onRetag: (MemoryEntity) -
             color = Color(0xFFBFE8FF)
         )
     }
+    }
+}
+
+/** v1.16 swipe rule: far right True, far left False, short swipe either way Unsure. */
+internal fun swipeTarget(dx: Float, nearPx: Float, farPx: Float): String? = when {
+    dx >= farPx -> TruthTag.TRUE
+    dx <= -farPx -> TruthTag.FALSE
+    abs(dx) >= nearPx -> TruthTag.UNSURE
+    else -> null
 }
 
 @Composable

@@ -75,6 +75,20 @@ fun OnlineScreen(wide: Boolean) {
     var cloudHost by remember { mutableStateOf(repo.onlineCloudHost) }
     var showCloud by remember { mutableStateOf(false) }
     var network by remember { mutableStateOf(isOnline(context)) }
+    var askNew by remember { mutableStateOf(false) }
+    if (askNew) {
+        ConfirmClearDialog(
+            title = "Start a new Online chat?",
+            body = "This clears the Online conversation on this phone. Chat, Terminal, and Memory stay.",
+            confirmLabel = "Clear",
+            onConfirm = {
+                messages = repo.clearOnline().messages
+                notice = null
+                evolveStatus = null
+            },
+            onDismiss = { askNew = false }
+        )
+    }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -151,9 +165,11 @@ fun OnlineScreen(wide: Boolean) {
                     .clip(RoundedCornerShape(999.dp))
                     .background(Color(0xFF1E2228))
                     .clickable(enabled = !busy) {
-                        messages = repo.clearOnline().messages
-                        notice = null
-                        evolveStatus = null
+                        if (messages.isEmpty()) {
+                            messages = repo.clearOnline().messages
+                        } else {
+                            askNew = true
+                        }
                     }
                     .padding(horizontal = 14.dp, vertical = 8.dp)
             )

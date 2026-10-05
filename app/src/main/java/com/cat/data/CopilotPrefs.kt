@@ -79,6 +79,27 @@ class CopilotPrefs(context: Context) {
      * for topic keywords and save an Unsure "online: …" note.
      * Never reads browser history, OneDrive, or other apps.
      */
+    /** v1.16: Autopilot speech volume, 0.0–1.0. Chat only. */
+    var autopilotVolume: Float
+        get() = prefs.getFloat(KEY_AUTOPILOT_VOLUME, 0.8f).coerceIn(0f, 1f)
+        set(value) {
+            prefs.edit().putFloat(KEY_AUTOPILOT_VOLUME, value.coerceIn(0f, 1f)).apply()
+        }
+
+    /** v1.16: picked neon accent id (see NeonAccent). */
+    var accentId: String
+        get() = prefs.getString(KEY_ACCENT, "cyan").orEmpty().ifBlank { "cyan" }
+        set(value) {
+            prefs.edit().putString(KEY_ACCENT, value).apply()
+        }
+
+    /** v1.16: when the user last exported memory as PDF (for the text-only backup reminder). */
+    var lastMemoryExport: Long
+        get() = prefs.getLong(KEY_LAST_EXPORT, 0L)
+        set(value) {
+            prefs.edit().putLong(KEY_LAST_EXPORT, value).apply()
+        }
+
     var onlineEvolve: Boolean
         get() = prefs.getBoolean(KEY_ONLINE_EVOLVE, false)
         set(value) {
@@ -201,6 +222,9 @@ class CopilotPrefs(context: Context) {
         private const val KEY_GROUP = "group_solver"
         private const val KEY_AUTOPILOT = "autopilot"
         private const val KEY_ONLINE_EVOLVE = "online_evolve"
+        private const val KEY_AUTOPILOT_VOLUME = "autopilot_volume"
+        private const val KEY_ACCENT = "neon_accent"
+        private const val KEY_LAST_EXPORT = "last_memory_export"
         private const val KEY_URL = "base_url"
         private const val KEY_API = "api_key"
         private const val KEY_MODEL = "model"

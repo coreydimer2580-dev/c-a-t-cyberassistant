@@ -99,6 +99,9 @@ fun ChatScreen(wide: Boolean, onOpenWheel: (() -> Unit)? = null) {
     var autoFollowSpent by remember { mutableStateOf(false) }
     val memories by app.database.memoryDao().observeAll().collectAsState(initial = emptyList())
     val speech = remember { SpeechHelper(context) }
+    var volume by remember { mutableStateOf(app.prefs.autopilotVolume) }
+    var askNew by remember { mutableStateOf(false) }
+    LaunchedEffect(volume) { speech.volume = volume }
 
     DisposableEffect(Unit) {
         onDispose { speech.shutdown() }
@@ -214,8 +217,17 @@ fun ChatScreen(wide: Boolean, onOpenWheel: (() -> Unit)? = null) {
             },
             onOptions = { showOptions = !showOptions },
             optionsOpen = showOptions,
-            onNewChat = { newChat() }
+            onNewChat = { if (messages.isEmpty()) newChat() else askNew = true }
         )
+        if (askNew) {
+            ConfirmClearDialog(
+                title = "Start a new chat?",
+                body = "This clears the current Chat history on this phone. Memory notes and Terminal stay.",
+                confirmLabel = "Clear chat",
+                onConfirm = { newChat() },
+                onDismiss = { askNew = false }
+            )
+        }
 
         if (showOptions) {
             SystemStrip(
@@ -260,6 +272,12 @@ fun ChatScreen(wide: Boolean, onOpenWheel: (() -> Unit)? = null) {
                     onlineEvolve = it
                     app.prefs.onlineEvolve = it
                 },
+                volume = volume,
+                onVolume = {
+                    volume = it
+                    app.prefs.autopilotVolume = it
+                },
+                onVolumeTest = { speech.speak("C@T volume check.", flush = true) },
                 onOpenWheel = onOpenWheel
             )
         }
@@ -430,8 +448,18 @@ private fun SystemStrip(
     onGroup: (Boolean) -> Unit,
     onAutopilot: (Boolean) -> Unit,
     onOnlineEvolve: (Boolean) -> Unit,
+    volume: Float,
+    onVolume: (Float) -> Unit,
+    onVolumeTest: () -> Unit,
     onOpenWheel: (() -> Unit)?
 ) {
+    var clock by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            clock = System.currentTimeMillis()
+            delay(15_000)
+        }
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -444,6 +472,7 @@ private fun SystemStrip(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            StatusChip("Perth " + perthClock(clock), NeonLime, selected = false)
             StatusChip(if (online) "Online" else "Offline", if (online) NeonLime else NeonMagenta)
             StatusChip(persona.shortLabel, NeonCyan)
             if (!evolveStatus.isNullOrBlank()) {
@@ -470,6 +499,31 @@ private fun SystemStrip(
             if (onOpenWheel != null) {
                 StatusChip("Wheel", NeonCyan, onClick = onOpenWheel)
             }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                if (volume <= 0f) "Speak vol · muted" else "Speak vol ${(volume * 100).toInt()}%",
+                color = if (autopilot) NeonLime else Mist,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+            androidx.compose.material3.Slider(
+                value = volume,
+                onValueChange = onVolume,
+                valueRange = 0f..1f,
+                steps = 9,
+                modifier = Modifier.weight(1f),
+                colors = androidx.compose.material3.SliderDefaults.colors(
+                    thumbColor = NeonLime,
+                    activeTrackColor = NeonCyan,
+                    inactiveTrackColor = Color(0xFF1E2228)
+                )
+            )
+            StatusChip("Test", NeonCyan, selected = false, onClick = onVolumeTest)
         }
         Text(
             "Auto = talk + offline group solve + evolve on send. Cloud is optional and only used if you saved your own endpoint.",
@@ -747,6 +801,12 @@ internal fun ThinkingBubble(who: String) {
         modifier = Modifier.padding(start = 38.dp)
     )
 }
+
+/** v1.16: Australia/Perth wall clock for status strips. On-device only. */
+internal fun perthClock(millis: Long): String =
+    java.time.Instant.ofEpochMilli(millis)
+        .atZone(java.time.ZoneId.of(com.cat.tools.LocalTools.PERTH_ZONE))
+        .format(java.time.format.DateTimeFormatter.ofPattern("h:mm a", com.cat.tools.LocalTools.AU_LOCALE))
 
 internal fun isOnline(context: Context): Boolean {
     val cm = context.getSystemService(ConnectivityManager::class.java) ?: return false

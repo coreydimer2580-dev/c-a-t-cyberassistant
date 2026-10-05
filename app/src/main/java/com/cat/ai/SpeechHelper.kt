@@ -1,6 +1,7 @@
 package com.cat.ai
 
 import android.content.Context
+import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
@@ -27,13 +28,20 @@ class SpeechHelper(context: Context) {
         }
     }
 
+    /** v1.16: Autopilot volume, 0.0–1.0. Applied per utterance; does not touch system volume. */
+    @Volatile
+    var volume: Float = 0.8f
+        set(value) { field = value.coerceIn(0f, 1f) }
+
     fun speak(text: String, cap: Int = 400, flush: Boolean = true) {
         val engine = tts ?: return
         if (!ready.get()) return
         val clipped = text.replace(Regex("\\s+"), " ").trim().take(cap)
         if (clipped.isBlank()) return
         val mode = if (flush) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
-        engine.speak(clipped, mode, null, "cat-autopilot-${System.nanoTime()}")
+        if (volume <= 0f) return
+        val params = Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume) }
+        engine.speak(clipped, mode, params, "cat-autopilot-${System.nanoTime()}")
     }
 
     fun stop() {

@@ -299,6 +299,7 @@ private fun ChecklistCard() {
     val app = LocalContext.current.applicationContext as CAtApplication
     var items by remember { mutableStateOf(app.prefs.loadTodos()) }
     var draft by remember { mutableStateOf("") }
+    var askClear by remember { mutableStateOf(false) }
     fun persist(next: List<Pair<Boolean, String>>) {
         items = next
         app.prefs.saveTodos(next)
@@ -332,7 +333,15 @@ private fun ChecklistCard() {
             }
         }
         if (items.isNotEmpty()) {
-            OutlinedButton(onClick = { persist(emptyList()) }) { Text("Clear list") }
+            OutlinedButton(onClick = { askClear = true }) { Text("Clear list") }
+        }
+        if (askClear) {
+            ConfirmClearDialog(
+                title = "Clear the checklist?",
+                body = "This removes all ${items.size} to-dos. It can't be undone.",
+                onConfirm = { persist(emptyList()) },
+                onDismiss = { askClear = false }
+            )
         }
     }
 }
