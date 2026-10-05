@@ -116,7 +116,7 @@ class CopilotEngine(
             )
         }
         return OfflineResult(
-            reply = styleReply(persona, contextualReply(clean, recentChat, memories, memoryTags)),
+            reply = styleReply(persona, contextualReply(clean, recentChat, memories, memoryTags, todos)),
             skipCloud = false
         )
     }
@@ -321,49 +321,103 @@ class CopilotEngine(
         return "Thread snapshot:\n" + lines.joinToString("\n")
     }
 
+    /**
+     * v1.15: smarter offline answer.
+     * 1. OfflineBrain handles maths, conversions, dates, plans, decisions, how-to, explain, ideas, drafts.
+     * 2. Ranked memory (exact > stem > substring, True boost, False cut, newest wins ties) is cited.
+     * 3. Matching lines from this thread add context.
+     * 4. Otherwise a helpful clarifying reply instead of a dead end.
+     */
     private fun contextualReply(
         clean: String,
         recentChat: List<Pair<String, String>>,
         memories: List<String>,
-        tags: List<String>
+        tags: List<String>,
+        todos: List<String> = emptyList()
     ): String {
-        val keywords = clean.lowercase()
-            .split(Regex("[^a-z0-9]+"))
-            .filter { it.length >= 3 && it !in STOP }
-            .distinct()
-        val noteHits = memories.mapIndexed { index, note ->
-            val hay = note.lowercase()
-            Triple(note, tags.getOrNull(index).orEmpty(), keywords.count { hay.contains(it) })
-        }.filter { it.third > 0 }
-            .sortedByDescending { it.third }
+        val brain = OfflineBrain.answer(clean, recentChat, todos, clockMillis())
+        val noteHits = rankMemories(memories, tags, clean)
+            .filter { it.score >= MIN_MEMORY_SCORE }
             .take(3)
-        val chatHits = recentChat.filter { (_, content) ->
-            val hay = content.lowercase()
-            keywords.any { hay.contains(it) }
-        }.take(3)
+        val keywords = keywordsOf(clean)
+        val chatHits = if (brain != null) emptyList() else recentChat.filter { (_, content) ->
+            val stems = tokenStems(content)
+            keywords.any { stem(it) in stems }
+        }.takeLast(3)
 
-        if (noteHits.isEmpty() && chatHits.isEmpty()) {
-            return "C@T offline (Australia/Perth). No matching note for \"${clean.take(80)}\". " +
-                "Try /remember <fact>, /recall, /tools, or /help. Wi-Fi is not required. " +
-                "Cloud is optional in Settings and falls back here if it cannot connect."
+        val memoryBlock = if (noteHits.isEmpty()) null else
+            "Using saved memory:\n" + noteHits.joinToString("\n") { hit ->
+                val tag = hit.tag.orEmpty()
+                if (tag.isBlank()) "- ${hit.note}" else "- [${com.cat.data.TruthTag.normalize(tag)}] ${hit.note}"
+            }
+
+        if (brain != null) {
+            return if (memoryBlock == null) brain.text else brain.text + "\n\n" + memoryBlock
         }
-        val parts = mutableListOf("C@T offline (Australia/Perth).")
-        if (noteHits.isNotEmpty()) {
-            parts.add(
-                "Using saved memory:\n" + noteHits.joinToString("\n") { (note, tag, _) ->
-                    if (tag.isBlank()) "- $note" else "- [${com.cat.data.TruthTag.normalize(tag)}] $note"
+
+        if (noteHits.isNotEmpty() || chatHits.isNotEmpty()) {
+            val parts = mutableListOf<String>()
+            val top = noteHits.firstOrNull()
+            if (top != null) {
+                val tag = com.cat.data.TruthTag.normalize(top.tag.orEmpty())
+                val caveat = when (tag) {
+                    "True" -> " (you marked this True)"
+                    "False" -> " — but you marked this False, so treat it with care"
+                    else -> ""
                 }
-            )
+                parts.add("From your notes: ${top.note.trimEnd('.')}$caveat.")
+            }
+            memoryBlock?.let { parts.add(it) }
+            if (chatHits.isNotEmpty()) {
+                parts.add(
+                    "From this thread:\n" + chatHits.joinToString("\n") { (role, content) ->
+                        val who = if (role == "user") "You" else "C@T"
+                        "- $who: ${content.replace("\n", " ").take(120)}"
+                    }
+                )
+            }
+            return parts.joinToString("\n")
         }
-        if (chatHits.isNotEmpty()) {
-            parts.add(
-                "From this thread:\n" + chatHits.joinToString("\n") { (role, content) ->
-                    val who = if (role == "user") "You" else "C@T"
-                    "- $who: ${content.replace("\n", " ").take(120)}"
-                }
-            )
+
+        val topic = OfflineBrain.topicOf(clean)
+        val question = clean.trim().endsWith("?") ||
+            Regex("(?i)^(who|what|when|where|why|how|is|are|can|do|does|will|should)\\b").containsMatchIn(clean.trim())
+        return if (question) {
+            "Good question about $topic. I'm answering offline from what's on this phone, and I don't have a saved note on it yet.\n" +
+                "I can still help:\n" +
+                "1. Break it into steps — say \"how do I …\"\n" +
+                "2. Weigh options — say \"should I … or …\"\n" +
+                "3. Explain a term — say \"what is …\"\n" +
+                "4. Save the answer once you know it — say \"remember …\"\n" +
+                "Add a little detail and I'll be specific."
+        } else {
+            "Got it — $topic. What would help most: a quick plan, a few options, or should I remember this for later?"
         }
-        return parts.joinToString("\n")
+    }
+
+    private fun keywordsOf(text: String): List<String> = text.lowercase()
+        .split(Regex("[^a-z0-9]+"))
+        .filter { it.length >= 3 && it !in STOP }
+        .distinct()
+
+    private fun tokenStems(text: String): Set<String> = text.lowercase()
+        .split(Regex("[^a-z0-9]+"))
+        .filter { it.isNotEmpty() }
+        .map { stem(it) }
+        .toSet()
+
+    /** Tiny English stemmer: meetings/meeting/meet, parked/park, boxes/box. */
+    private fun stem(word: String): String {
+        val w = word.lowercase()
+        return when {
+            w.length > 5 && w.endsWith("ings") -> w.dropLast(4)
+            w.length > 4 && w.endsWith("ing") -> w.dropLast(3)
+            w.length > 4 && w.endsWith("ies") -> w.dropLast(3) + "y"
+            w.length > 4 && w.endsWith("ed") -> w.dropLast(2)
+            w.length > 4 && w.endsWith("es") && (w.endsWith("xes") || w.endsWith("shes") || w.endsWith("ches")) -> w.dropLast(2)
+            w.length > 3 && w.endsWith("s") && !w.endsWith("ss") -> w.dropLast(1)
+            else -> w
+        }
     }
 
 
@@ -387,7 +441,7 @@ class CopilotEngine(
         todos: List<String> = emptyList(),
         memoryTags: List<String> = emptyList(),
         persona: AiPersona = AiPersona.OFFLINE_CAT,
-        versionName: String = "1.13",
+        versionName: String = "1.15",
         versionCode: Int = 18,
         online: Boolean = false,
         privateMode: Boolean = false
@@ -531,16 +585,24 @@ class CopilotEngine(
             .split(Regex("[^a-z0-9]+"))
             .filter { it.length > 2 && it !in STOP }
             .distinct()
+        val wantedStems = wanted.map { stem(it) }
         return memories.mapIndexed { index, note ->
             val hay = note.lowercase()
             val tokens = hay.split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() }.toSet()
+            val stems = tokens.map { stem(it) }.toSet()
             var score = 0
-            for (w in wanted) {
+            var matched = 0
+            for ((k, w) in wanted.withIndex()) {
                 when {
-                    w in tokens -> score += 3
-                    hay.contains(w) -> score += 1
+                    w in tokens -> { score += 3; matched++ }
+                    wantedStems[k] in stems -> { score += 2; matched++ }
+                    w.length >= 4 && hay.contains(w) -> score += 1
                 }
             }
+            // Coverage: a note matching most of the question beats one matching a single word.
+            if (wanted.size >= 2 && matched >= 2) score += matched
+            // Auto "best so far" summaries should not crowd out notes the user saved.
+            if (score > 0 && hay.startsWith("best so far:")) score -= 2
             if (wanted.size >= 2) {
                 val phrase = wanted.take(3).joinToString(" ")
                 if (hay.contains(phrase)) score += 4
@@ -554,8 +616,9 @@ class CopilotEngine(
             }
             RankedMemory(note, tag, score, index)
         }.sortedWith(
+            // Memories arrive newest first, so a lower index is newer and wins ties.
             compareByDescending<RankedMemory> { it.score }
-                .thenByDescending { it.index }
+                .thenBy { it.index }
         )
     }
 
@@ -604,6 +667,7 @@ class CopilotEngine(
 
     companion object {
         private val CONFIRM_CLEAR = setOf("yes", "y", "confirm")
+        private const val MIN_MEMORY_SCORE = 2
         private val REMEMBER = Regex("(?i)^(?:please\\s+)?remember(?:\\s+that)?\\s+(.+)$")
         private val CONFIDENCE = listOf(
             "i know", "i knew", "i'm sure", "im sure", "i am sure",

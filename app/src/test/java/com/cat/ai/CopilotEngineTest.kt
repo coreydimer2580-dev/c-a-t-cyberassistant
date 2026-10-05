@@ -257,4 +257,21 @@ class CopilotEngineTest {
         if (kettle >= 0) assertTrue(tea < kettle)
     }
 
+
+    @Test
+    fun stemmedMemoryMatchesAndNewestWinsTies() {
+        val result = engine.respond(
+            "where are my meetings",
+            emptyList(),
+            listOf("meeting moved to room 5", "meeting was in room 2")
+        )
+        assertTrue(result.reply.contains("From your notes: meeting moved to room 5"))
+    }
+
+    @Test
+    fun offlineBrainAnswersInsideEngine() {
+        assertTrue(engine.respond("what is 6 * 7", emptyList(), emptyList()).reply.contains("= 42"))
+        val unknown = engine.respond("why is the sky so loud today?", emptyList(), emptyList()).reply
+        assertTrue(unknown.contains("I can still help"))
+    }
 }

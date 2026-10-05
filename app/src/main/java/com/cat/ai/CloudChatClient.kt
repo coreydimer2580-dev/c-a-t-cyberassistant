@@ -15,6 +15,9 @@ class CloudChatClient {
         model: String,
         messages: List<Pair<String, String>>
     ): String {
+        // Never reach emulator / loopback hosts from a real phone.
+        require(!com.cat.data.CopilotPrefs.isLocalOnlyUrl(baseUrl)) { "local-only address" }
+        require(com.cat.data.CopilotPrefs.looksLikeUrl(baseUrl)) { "not a web address" }
         val root = baseUrl.trim().trimEnd('/')
         val endpoint = if (root.endsWith("/chat/completions")) root else "$root/chat/completions"
         val payload = JSONObject()

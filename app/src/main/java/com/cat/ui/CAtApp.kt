@@ -48,6 +48,7 @@ import com.cat.ui.theme.neonCard
 
 private object Routes {
     const val CHAT = "chat"
+    const val ONLINE = "online"
     const val TERMINAL = "terminal"
     const val WHEEL = "wheel"
     const val MEMORY = "memory"
@@ -65,8 +66,8 @@ fun CAtApp() {
         false
     }
 
-    val tabs = listOf("Terminal", "Chat", "Wheel", "Memory", "Settings")
-    val routes = listOf(Routes.TERMINAL, Routes.CHAT, Routes.WHEEL, Routes.MEMORY, Routes.SETTINGS)
+    val tabs = listOf("Terminal", "Chat", "Online", "Wheel", "Memory", "Settings")
+    val routes = listOf(Routes.TERMINAL, Routes.CHAT, Routes.ONLINE, Routes.WHEEL, Routes.MEMORY, Routes.SETTINGS)
     var selectedTab by remember { mutableIntStateOf(0) }
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
@@ -86,9 +87,10 @@ fun CAtApp() {
         val tabIndex = when (route) {
             Routes.TERMINAL -> 0
             Routes.CHAT -> 1
-            Routes.WHEEL -> 2
-            Routes.MEMORY -> 3
-            Routes.SETTINGS, Routes.TOOLS -> 4
+            Routes.ONLINE -> 2
+            Routes.WHEEL -> 3
+            Routes.MEMORY -> 4
+            Routes.SETTINGS, Routes.TOOLS -> 5
             else -> selectedTab
         }
         if (tabIndex != selectedTab) selectedTab = tabIndex
@@ -116,11 +118,11 @@ fun CAtApp() {
                         AppNav(
                             navController = navController,
                             wide = true,
-                            onOpenWheel = { openTab(2) },
+                            onOpenWheel = { openTab(3) },
                             onOpenTools = {
                                 navController.navigate(Routes.TOOLS) { launchSingleTop = true }
                             },
-                            onToolsBack = { openTab(4) }
+                            onToolsBack = { openTab(5) }
                         )
                     }
                 }
@@ -174,11 +176,11 @@ fun CAtApp() {
                     AppNav(
                         navController = navController,
                         wide = false,
-                        onOpenWheel = { openTab(2) },
+                        onOpenWheel = { openTab(3) },
                         onOpenTools = {
                             navController.navigate(Routes.TOOLS) { launchSingleTop = true }
                         },
-                        onToolsBack = { openTab(4) }
+                        onToolsBack = { openTab(5) }
                     )
                 }
             }
@@ -209,7 +211,8 @@ private fun NeonSidebar(
                 accent = when (index) {
                     0 -> NeonLime
                     1 -> NeonCyan
-                    2 -> NeonMagenta
+                    2 -> NeonCyan
+                    3 -> NeonMagenta
                     else -> NeonLime
                 },
                 onClick = { onSelect(index) }
@@ -257,6 +260,9 @@ private fun ColumnScope.AppNav(
         }
         composable(Routes.CHAT) {
             ChatScreen(wide = wide, onOpenWheel = onOpenWheel)
+        }
+        composable(Routes.ONLINE) {
+            OnlineScreen(wide = wide)
         }
         composable(Routes.WHEEL) {
             WheelScreen(wide = wide)

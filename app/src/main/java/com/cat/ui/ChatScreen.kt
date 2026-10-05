@@ -585,7 +585,13 @@ private fun LiveMemoryRail(memories: List<MemoryEntity>) {
 }
 
 @Composable
-private fun Composer(draft: String, enabled: Boolean, onDraft: (String) -> Unit, onSend: () -> Unit) {
+internal fun Composer(
+    draft: String,
+    enabled: Boolean,
+    onDraft: (String) -> Unit,
+    onSend: () -> Unit,
+    placeholder: String = "Message C@T"
+) {
     val canSend = enabled && draft.isNotBlank()
     Row(
         modifier = Modifier
@@ -608,7 +614,7 @@ private fun Composer(draft: String, enabled: Boolean, onDraft: (String) -> Unit,
             decorationBox = { inner ->
                 Box {
                     if (draft.isEmpty()) {
-                        Text("Message C@T", color = Color(0xFF7A828E), fontSize = 16.sp)
+                        Text(placeholder, color = Color(0xFF7A828E), fontSize = 16.sp)
                     }
                     inner()
                 }
@@ -713,7 +719,7 @@ private fun ChatBubble(
 }
 
 @Composable
-private fun ActionText(label: String, onClick: () -> Unit) {
+internal fun ActionText(label: String, onClick: () -> Unit) {
     Text(
         text = label,
         color = Color(0xFF9AA3AE),
@@ -726,7 +732,7 @@ private fun ActionText(label: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ThinkingBubble(who: String) {
+internal fun ThinkingBubble(who: String) {
     val transition = rememberInfiniteTransition(label = "think")
     val alpha by transition.animateFloat(
         initialValue = 0.25f,
@@ -742,7 +748,7 @@ private fun ThinkingBubble(who: String) {
     )
 }
 
-private fun isOnline(context: Context): Boolean {
+internal fun isOnline(context: Context): Boolean {
     val cm = context.getSystemService(ConnectivityManager::class.java) ?: return false
     val network = cm.activeNetwork ?: return false
     val caps = cm.getNetworkCapabilities(network) ?: return false

@@ -144,6 +144,96 @@ class CopilotRepository(
         return evolved.summary.take(120)
     }
 
+    // ---------------- Online tab (v1.15) ----------------
+
+    /** One Online-tab bubble. source = "user", "cloud", or "offline". */
+    data class OnlineMessage(val id: Long, val role: String, val content: String, val source: String)
+
+    data class OnlineTurn(
+        val messages: List<OnlineMessage>,
+        val notice: String?,
+        val evolveStatus: String? = null
+    )
+
+    private val onlineLog = mutableListOf<OnlineMessage>()
+    private var onlineSeq = 0L
+
+    /** Optional cloud is used only with a real (non-emulator) URL *and* a key. */
+    val onlineCloudReady: Boolean get() = prefs.groupCloudReady
+
+    /** Host of the saved cloud, for the "Optional cloud" label. Empty when none. */
+    val onlineCloudHost: String
+        get() = if (!prefs.groupCloudReady) "" else
+            prefs.baseUrl.substringAfter("://").substringBefore('/').take(40)
+
+    fun onlineHistory(): List<OnlineMessage> = synchronized(onlineLog) { onlineLog.toList() }
+
+    fun clearOnline(): OnlineTurn {
+        synchronized(onlineLog) { onlineLog.clear() }
+        return OnlineTurn(emptyList(), null)
+    }
+
+    private fun addOnline(role: String, content: String, source: String) {
+        synchronized(onlineLog) {
+            onlineSeq += 1
+            onlineLog.add(OnlineMessage(onlineSeq, role, content, source))
+            while (onlineLog.size > 200) onlineLog.removeAt(0)
+        }
+    }
+
+    /**
+     * Online tab send. No login, no key needed:
+     *  - no cloud saved -> Offline English AI answers (same brain as Chat), no error.
+     *  - cloud saved (URL + key) and network up -> your cloud answers.
+     *  - cloud fails / quiet / no network -> soft fall back to the offline answer.
+     * Never connects to emulator or loopback hosts (CopilotPrefs blanks them).
+     */
+    suspend fun sendOnline(raw: String): OnlineTurn {
+        val prepared = engine.prepare(raw)
+        if (prepared.text.isBlank()) return OnlineTurn(onlineHistory(), "Nothing to send.")
+        val prior = onlineHistory().takeLast(16).map { it.role to it.content }
+        addOnline("user", prepared.text, "user")
+        val (lines, tags) = taggedMemory()
+        val offline = engine.respond(prepared.text, prior, lines, todoLines(), tags, AiPersona.OFFLINE_CAT)
+        persistLearned(offline)
+        if (!offline.todoToAdd.isNullOrBlank()) {
+            prefs.saveTodos(prefs.loadTodos() + (false to offline.todoToAdd))
+        }
+
+        var reply = offline.reply
+        var source = "offline"
+        var notice: String? = null
+        if (!offline.skipCloud && prefs.groupCloudReady) {
+            val online = runCatching { networkAvailable() }.getOrDefault(false)
+            if (!online) {
+                notice = "No network, so this reply is offline."
+            } else {
+                val cloudText = runCatching {
+                    withContext(Dispatchers.IO) {
+                        cloud.complete(
+                            prefs.baseUrl,
+                            prefs.apiKey,
+                            prefs.model,
+                            promptFor(AiPersona.CLOUD_GPT, prior + ("user" to prepared.text))
+                        )
+                    }
+                }.getOrNull()
+                if (!cloudText.isNullOrBlank()) {
+                    reply = cloudText
+                    source = "cloud"
+                } else {
+                    notice = "Cloud didn't answer, so this reply is offline."
+                }
+            }
+        }
+        val stored = engine.prepare(reply)
+        addOnline("assistant", stored.text.ifBlank { offline.reply }, source)
+        val evolve = runCatching {
+            localEvolveNote(onlineHistory().takeLast(12).map { it.role to it.content })
+        }.getOrNull()
+        return OnlineTurn(onlineHistory(), notice, evolve)
+    }
+
     suspend fun clear(): Turn {
         database.chatDao().clearAll()
         return Turn(emptyList(), null)
