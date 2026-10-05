@@ -41,6 +41,7 @@ import com.cat.data.MemoryStorage
 import com.cat.data.TruthTag
 import com.cat.model.MemoryStack
 import com.cat.ui.theme.NeonCyan
+import com.cat.ui.theme.neonCard
 import com.cat.ui.theme.NeonLime
 import com.cat.ui.theme.NeonMagenta
 import java.text.DateFormat
@@ -243,8 +244,12 @@ private fun NoteCard(note: MemoryEntity, hot: Boolean, onRetag: (MemoryEntity) -
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (hot) Color(0xFF14210A) else Color(0xFF111821), RoundedCornerShape(16.dp))
-            .border(1.dp, if (hot) NeonLime else NeonCyan.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
+            .neonCard(
+                accent = if (hot) NeonLime else NeonCyan,
+                shape = RoundedCornerShape(16.dp),
+                fill = if (hot) Color(0xFF14210A) else Color(0xFF111821),
+                glow = if (hot) 18.dp else 12.dp
+            )
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
@@ -291,7 +296,7 @@ private fun StackPane(stacks: List<MemoryStack>, modifier: Modifier) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF111821), RoundedCornerShape(16.dp))
+                    .neonCard(accent = NeonMagenta, shape = RoundedCornerShape(16.dp), fill = Color(0xFF111821), glow = 12.dp)
                     .padding(16.dp)
             ) {
                 Column {

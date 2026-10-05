@@ -35,6 +35,7 @@ import com.cat.ai.SensitiveFilter
 import com.cat.data.CopilotPrefs
 import com.cat.model.FeatureToggle
 import com.cat.ui.theme.NeonCyan
+import com.cat.ui.theme.neonCard
 import com.cat.ui.theme.NeonLime
 import com.cat.ui.theme.NeonMagenta
 
@@ -115,7 +116,12 @@ private fun ToggleList(features: List<FeatureToggle>, onToggle: (Int) -> Unit) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF111821), RoundedCornerShape(16.dp))
+                .neonCard(
+                    accent = if (feature.enabled) NeonLime else NeonMagenta,
+                    shape = RoundedCornerShape(16.dp),
+                    fill = Color(0xFF111821),
+                    glow = 10.dp
+                )
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically

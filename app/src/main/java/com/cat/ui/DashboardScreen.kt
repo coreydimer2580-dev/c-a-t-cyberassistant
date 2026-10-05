@@ -37,10 +37,12 @@ import com.cat.data.MemoryEntity
 import com.cat.data.MemoryStorage
 import com.cat.model.FeatureToggle
 import com.cat.model.WorldState
+import com.cat.ui.theme.CatWordmark
 import com.cat.ui.theme.NeonCyan
 import com.cat.ui.theme.NeonLime
 import com.cat.ui.theme.NeonMagenta
 import com.cat.ui.theme.Panel
+import com.cat.ui.theme.neonCard
 
 @Composable
 fun DashboardScreen(
@@ -142,15 +144,11 @@ private fun StatusCard(modeLabel: String, snippet: String, memories: List<Memory
 
 @Composable
 private fun NeonCard(content: @Composable () -> Unit) {
+    val shape = RoundedCornerShape(20.dp)
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Panel, RoundedCornerShape(20.dp))
-            .border(
-                width = 1.5.dp,
-                brush = Brush.linearGradient(listOf(NeonCyan, NeonMagenta, NeonLime)),
-                shape = RoundedCornerShape(20.dp)
-            )
+            .neonCard(accent = NeonCyan, shape = shape, fill = Panel, glow = 18.dp)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) { content() }
@@ -159,15 +157,15 @@ private fun NeonCard(content: @Composable () -> Unit) {
 @Composable
 private fun Hero() {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(text = "C@T", color = NeonCyan, fontSize = 42.sp, fontWeight = FontWeight.Black)
+        CatWordmark(size = 72.sp)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF0D0D14), RoundedCornerShape(24.dp))
-                .border(
-                    width = 2.dp,
-                    brush = Brush.linearGradient(listOf(NeonCyan, NeonMagenta, NeonLime)),
-                    shape = RoundedCornerShape(24.dp)
+                .neonCard(
+                    accent = NeonMagenta,
+                    shape = RoundedCornerShape(24.dp),
+                    fill = Color(0xFF0D0D14),
+                    glow = 22.dp
                 )
                 .padding(20.dp)
         ) {
@@ -203,7 +201,12 @@ private fun ModuleList(features: List<FeatureToggle>) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF111821), RoundedCornerShape(14.dp))
+                    .neonCard(
+                        accent = if (feature.enabled) NeonLime else NeonMagenta,
+                        shape = RoundedCornerShape(14.dp),
+                        fill = Color(0xFF111821),
+                        glow = 10.dp
+                    )
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically

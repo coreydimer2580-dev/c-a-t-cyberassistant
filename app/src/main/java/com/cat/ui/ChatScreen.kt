@@ -52,12 +52,14 @@ import com.cat.ai.CopilotMode
 import com.cat.data.ChatMessage
 import com.cat.data.MemoryEntity
 import com.cat.tools.PhoneIntents
+import com.cat.ui.theme.CatWordmark
 import com.cat.ui.theme.Mist
 import com.cat.ui.theme.NeonCyan
 import com.cat.ui.theme.NeonLime
 import com.cat.ui.theme.NeonMagenta
 import com.cat.ui.theme.Panel
 import com.cat.ui.theme.Paper
+import com.cat.ui.theme.neonCard
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -128,7 +130,7 @@ fun ChatScreen(onBack: () -> Unit, wide: Boolean) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 TextButton(onClick = onBack) { Text("Back", color = NeonMagenta, fontWeight = FontWeight.Bold) }
-                Text("C@T", color = NeonCyan, fontSize = 28.sp, fontWeight = FontWeight.Black)
+                CatWordmark(size = 40.sp)
                 Text(mode.label, color = NeonLime, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
             Text(
@@ -163,8 +165,7 @@ fun ChatScreen(onBack: () -> Unit, wide: Boolean) {
                     color = Paper,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFF3A1030))
+                        .neonCard(accent = NeonMagenta, shape = RoundedCornerShape(12.dp), fill = Color(0xFF3A1030), glow = 12.dp)
                         .padding(10.dp)
                 )
             }
@@ -247,9 +248,7 @@ private fun LiveMemoryRail(memories: List<MemoryEntity>) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Panel)
-            .border(1.dp, NeonMagenta.copy(alpha = 0.7f), RoundedCornerShape(16.dp))
+            .neonCard(accent = NeonMagenta, shape = RoundedCornerShape(16.dp), fill = Panel, glow = 16.dp)
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
@@ -282,13 +281,7 @@ private fun Composer(draft: String, enabled: Boolean, onDraft: (String) -> Unit,
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(Color(0xFF050508))
-            .border(
-                width = 1.5.dp,
-                brush = Brush.horizontalGradient(listOf(NeonCyan, NeonMagenta, NeonLime)),
-                shape = shape
-            )
+            .neonCard(accent = NeonCyan, shape = shape, fill = Color(0xFF050508), glow = 18.dp)
             .padding(horizontal = 6.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -346,6 +339,12 @@ private fun Bubble(message: ChatMessage, stream: Boolean) {
         }
     }
     val live = stream && shown.length < full.length
+    val shape = if (fromUser) {
+        RoundedCornerShape(topStart = 22.dp, topEnd = 6.dp, bottomEnd = 22.dp, bottomStart = 22.dp)
+    } else {
+        RoundedCornerShape(topStart = 6.dp, topEnd = 22.dp, bottomEnd = 22.dp, bottomStart = 22.dp)
+    }
+    val accent = if (fromUser) NeonCyan else NeonLime
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (fromUser) Arrangement.End else Arrangement.Start
@@ -353,21 +352,21 @@ private fun Bubble(message: ChatMessage, stream: Boolean) {
         Column(
             modifier = Modifier
                 .fillMaxWidth(0.88f)
-                .clip(RoundedCornerShape(18.dp))
-                .background(if (fromUser) Color(0xFF071C22) else Color(0xFF10160C))
-                .border(
-                    1.dp,
-                    if (fromUser) NeonCyan.copy(alpha = 0.85f) else NeonLime.copy(alpha = 0.75f),
-                    RoundedCornerShape(18.dp)
+                .neonCard(
+                    accent = accent,
+                    shape = shape,
+                    fill = if (fromUser) Color(0xFF042028) else Color(0xFF101808),
+                    glow = 14.dp
                 )
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
-                text = if (fromUser) "You" else "C@T",
-                color = if (fromUser) NeonCyan else NeonLime,
+                text = if (fromUser) "YOU" else "C@T",
+                color = accent,
                 fontSize = 12.sp,
-                fontWeight = FontWeight.Black
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.5.sp
             )
             Text(
                 text = if (live) "$shown▍" else shown,
@@ -395,8 +394,12 @@ private fun ThinkingBubble() {
         color = NeonCyan.copy(alpha = alpha),
         fontWeight = FontWeight.Black,
         modifier = Modifier
-            .clip(RoundedCornerShape(18.dp))
-            .background(Color(0xFF10160C))
+            .neonCard(
+                accent = NeonLime,
+                shape = RoundedCornerShape(topStart = 6.dp, topEnd = 22.dp, bottomEnd = 22.dp, bottomStart = 22.dp),
+                fill = Color(0xFF101808),
+                glow = 12.dp
+            )
             .padding(horizontal = 14.dp, vertical = 10.dp)
     )
 }

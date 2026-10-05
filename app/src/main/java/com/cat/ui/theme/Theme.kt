@@ -9,9 +9,9 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-val NeonCyan = Color(0xFF00F5FF)
-val NeonMagenta = Color(0xFFFF2BD6)
-val NeonLime = Color(0xFFB6FF00)
+val NeonCyan = Color(0xFF00FFFF)
+val NeonMagenta = Color(0xFFFF00EA)
+val NeonLime = Color(0xFFD6FF00)
 val Ink = Color(0xFF000000)
 val Panel = Color(0xFF07080C)
 val PanelRaised = Color(0xFF10131A)
@@ -45,7 +45,7 @@ private val CATColors = darkColorScheme(
 private val CATType = Typography(
     headlineLarge = TextStyle(
         fontWeight = FontWeight.Black,
-        fontSize = 40.sp,
+        fontSize = 56.sp,
         letterSpacing = 1.sp,
         color = NeonCyan
     ),

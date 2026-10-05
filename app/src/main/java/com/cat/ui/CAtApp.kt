@@ -43,10 +43,12 @@ import com.cat.model.MemoryStack
 import com.cat.model.VoiceProfile
 import com.cat.model.WorldState
 import com.cat.ui.theme.CATTheme
+import com.cat.ui.theme.CatWordmark
 import com.cat.ui.theme.NeonCyan
 import com.cat.ui.theme.NeonLime
 import com.cat.ui.theme.NeonMagenta
 import com.cat.ui.theme.Panel
+import com.cat.ui.theme.neonCard
 
 private object Routes {
     const val DASHBOARD = "dashboard"
@@ -190,6 +192,14 @@ fun CAtApp() {
                         .padding(12.dp)
                 ) {
                     if (!onChat) {
+                        CatWordmark(size = 52.sp)
+                        Text(
+                            "v1.5 · AU offline",
+                            color = NeonLime,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Black,
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
                         ScrollableTabRow(
                             selectedTabIndex = selectedTab,
                             containerColor = Panel,
@@ -260,8 +270,8 @@ private fun NeonSidebar(
             .background(Panel)
             .padding(14.dp)
     ) {
-        Text("C@T", color = NeonCyan, fontSize = 32.sp, fontWeight = FontWeight.Black)
-        Text("v1.4 · AU offline", color = NeonLime, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        CatWordmark(size = 40.sp)
+        Text("v1.5 · AU offline", color = NeonLime, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         Text("No network scan", color = NeonMagenta, fontSize = 11.sp, modifier = Modifier.padding(bottom = 16.dp))
         tabs.forEachIndexed { index, title ->
             SideItem(
@@ -292,7 +302,7 @@ private fun SideItem(label: String, selected: Boolean, accent: Color, onClick: (
             .padding(vertical = 3.dp)
             .fillMaxWidth()
             .clip(shape)
-            .background(if (selected) accent else Color.Transparent)
+            .then(if (selected) Modifier.neonCard(accent = accent, shape = shape, fill = accent, glow = 10.dp) else Modifier)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp)
     )

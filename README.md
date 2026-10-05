@@ -1,6 +1,6 @@
 # C@T - Cyber AI Assistant
 
-Version 1.4.3. Kotlin, Jetpack Compose, Room, and Navigation. Neon cyan, magenta, and lime on black. The cover screen keeps a tab row; the inner display (600dp and wider) uses a sidebar. Chat is a bottom composer with a streaming-style reply. Saved memory shows live disk use (Memory: N MB used · 100000 soft note target · limited by device storage) and stays in Room with no expiry and no note-count cap. 100000 is not a storage quota. Offline answers use those notes. Locale is en-AU. Clocks use Australia/Perth first. This is a normal APK. It is not a ROM and it does not scan the phone.
+Version 1.5. Kotlin, Jetpack Compose, Room, and Navigation. Neon cyan, magenta, and lime on black. The cover screen keeps a tab row; the inner display (600dp and wider) uses a sidebar. Chat is a bottom composer with a streaming-style reply. Saved memory shows live disk use (Memory: N MB used · 100000 soft note target · limited by device storage) and stays in Room with no expiry and no note-count cap. 100000 is not a storage quota. Offline answers use those notes. Locale is en-AU. Clocks use Australia/Perth first. This is a normal APK. It is not a ROM and it does not scan the phone.
 
 ## What this build does
 

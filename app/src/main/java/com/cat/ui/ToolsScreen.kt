@@ -39,6 +39,7 @@ import com.cat.tools.AuPhone
 import com.cat.tools.LocalTools
 import com.cat.tools.PhoneIntents
 import com.cat.ui.theme.NeonCyan
+import com.cat.ui.theme.neonCard
 import com.cat.ui.theme.NeonLime
 import com.cat.ui.theme.NeonMagenta
 import kotlinx.coroutines.delay
@@ -562,7 +563,12 @@ private fun CardColumn(content: @Composable () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFF111821), RoundedCornerShape(16.dp))
+            .neonCard(
+                accent = NeonCyan,
+                shape = RoundedCornerShape(16.dp),
+                fill = Color(0xFF111821),
+                glow = 14.dp
+            )
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) { content() }

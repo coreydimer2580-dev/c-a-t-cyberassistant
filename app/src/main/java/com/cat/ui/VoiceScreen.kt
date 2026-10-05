@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cat.model.VoiceProfile
 import com.cat.ui.theme.NeonCyan
+import com.cat.ui.theme.neonCard
 import com.cat.ui.theme.NeonLime
 import com.cat.ui.theme.NeonMagenta
 
@@ -40,7 +41,7 @@ fun VoiceScreen(profiles: List<VoiceProfile>) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF111821), RoundedCornerShape(16.dp))
+                    .neonCard(accent = NeonMagenta, shape = RoundedCornerShape(16.dp), fill = Color(0xFF111821), glow = 14.dp)
                     .padding(16.dp)
             ) {
                 Column {

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="black">#000000</color>
-    <color name="neon_cyan">#00F5FF</color>
-    <color name="neon_magenta">#FF00FF</color>
-    <color name="neon_lime">#7CFF00</color>
+    <color name="neon_cyan">#00FFFF</color>
+    <color name="neon_magenta">#FF00EA</color>
+    <color name="neon_lime">#D6FF00</color>
 </resources>
