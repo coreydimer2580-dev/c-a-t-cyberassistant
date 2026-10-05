@@ -1,6 +1,6 @@
 # C@T - Cyber AI Assistant
 
-Version 1.15 — new ChatGPT-style **Online** tab (no login, no key: Offline English AI answers; optional cloud only with your own URL + key), plus the 1.14 offline Auto fixes. Kotlin, Jetpack Compose, Room. Neon cyan, magenta, and lime on black.
+Version 1.17 — Autopilot speech ON by default on first launch. Built on 1.16 + 1.15 ChatGPT-style **Online** tab (no login, no key: Offline English AI answers; optional cloud only with your own URL + key), plus the 1.14 offline Auto fixes. Kotlin, Jetpack Compose, Room. Neon cyan, magenta, and lime on black.
 
 Opens on **Terminal**. Primary tabs: **Terminal · Chat · Online · Wheel · Memory · Settings**.
 
@@ -32,7 +32,7 @@ Opens on **Terminal**. Primary tabs: **Terminal · Chat · Online · Wheel · Me
 ## AI product
 
 - **Chat** — sticky composer, typing indicator, persona labels, thin system strip
-- **Autopilot** — optional speech on **Chat only** (TTS en-AU) and **one** follow-up chip, then waits. Terminal does not speak and does not use the mic.
+- **Autopilot** — speech on **Chat only** (TTS en-AU) starts **ON** when unset; **one** follow-up chip, then waits. Tap Speak to turn off. Terminal does not speak and does not use the mic.
 - **Evolve** — ranks recent chat + saved notes into a short "best so far" Unsure memory, and keeps a few of your own phrases (style)
 - **Online evolve** (optional, Chat only, when you send) — public Wikipedia / DuckDuckGo Instant Answer only. Never while the app sleeps. Never browser history, OneDrive, or other apps. Never updates the app.
 - **AI Wheel** — Offline C@T, Cloud GPT, Auto, Analyst, Coder, Coach, Creative

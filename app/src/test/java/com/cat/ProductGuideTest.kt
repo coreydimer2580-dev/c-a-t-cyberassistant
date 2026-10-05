@@ -12,6 +12,6 @@ class ProductGuideTest {
         assertEquals(listOf("Terminal", "Chat", "Online", "Wheel", "Memory", "Settings"), names)
         assertTrue(ProductGuide.SPEECH.contains("Chat only"))
         assertTrue(ProductGuide.SAFE.contains("No shell"))
-        assertTrue(ProductGuide.VERSION_LABEL.startsWith("v1.16"))
+        assertTrue(ProductGuide.VERSION_LABEL.startsWith("v1.17"))
     }
 }

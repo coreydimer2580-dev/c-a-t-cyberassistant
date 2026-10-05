@@ -67,9 +67,13 @@ class CopilotPrefs(context: Context) {
             prefs.edit().putBoolean(KEY_GROUP, value).apply()
         }
 
-    /** Speak replies + one auto follow-up chip (then wait for user). */
+    /**
+     * Speak replies + one auto follow-up chip (then wait for user).
+     * v1.17: defaults ON when the key was never set (first launch / unset).
+     * Users who already turned it off keep false.
+     */
     var autopilot: Boolean
-        get() = prefs.getBoolean(KEY_AUTOPILOT, false)
+        get() = prefs.getBoolean(KEY_AUTOPILOT, true)
         set(value) {
             prefs.edit().putBoolean(KEY_AUTOPILOT, value).apply()
         }
