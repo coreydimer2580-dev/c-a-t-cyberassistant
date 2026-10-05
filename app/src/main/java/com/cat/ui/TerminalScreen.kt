@@ -4,6 +4,7 @@ import android.app.Activity
 import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -185,6 +186,7 @@ private fun welcomeLines(): List<TerminalLine> {
         Commands: help, remember <fact>, recall, time, status, version, clear, unlock
         Voice defaults to Analyst. Typos on those commands are repaired.
         Each reply uses saved memories plus this encrypted vault.
+        Algorithm rail traces INPUT, CORRECT, MEMORY, then REPLY. PRIVATE lights when Private is on. Trace only — this app does not rewrite itself.
         Private ON stays offline, skips cloud, and hides this screen in recents.
         Chat stays a separate tab. PIN lock stays on this transcript.
     """.trimIndent()
@@ -205,6 +207,9 @@ private fun TerminalConsole(
     var busy by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
     var face by remember { mutableStateOf("…") }
+    var railSteps by remember { mutableStateOf(algorithmSteps(privateOn)) }
+    var railActive by remember { mutableStateOf(-1) }
+    var stepLabel by remember { mutableStateOf<String?>(null) }
 
     suspend fun refreshFace() {
         val snap = runCatching { app.copilot.terminalFace() }.getOrNull()
@@ -240,8 +245,17 @@ private fun TerminalConsole(
         if (rawOverride == null) draft = ""
         else draft = ""
         busy = true
+        val steps = algorithmSteps(privateOn)
+        railSteps = steps
         scope.launch {
+            suspend fun light(name: String) {
+                railActive = steps.indexOf(name)
+                stepLabel = name
+                delay(170)
+            }
+            light("INPUT")
             val fixed = SoftCorrect.apply(raw)
+            light("CORRECT")
             val now = System.currentTimeMillis()
             val prior = lines.filter { it.role == "you" || it.role == "cat" }
                 .map { (if (it.role == "you") "user" else "assistant") to it.text }
@@ -250,6 +264,9 @@ private fun TerminalConsole(
                 next += TerminalLine("sys", fixed.note, now)
             }
             next += TerminalLine("you", fixed.text, now + 1)
+            lines = next
+            light("MEMORY")
+            if ("PRIVATE" in steps) light("PRIVATE")
             val answer = runCatching {
                 app.copilot.answerTerminal(
                     fixed.text,
@@ -263,6 +280,8 @@ private fun TerminalConsole(
                     null
                 )
             }
+            railActive = steps.lastIndex
+            stepLabel = "REPLY"
             val catLine = TerminalLine("cat", answer.reply, System.currentTimeMillis())
             lines = if (answer.clearVault) {
                 welcomeLines() + TerminalLine("you", fixed.text, now + 1) + catLine
@@ -272,17 +291,25 @@ private fun TerminalConsole(
             notice = answer.notice
             app.terminalVault.save(lines)
             refreshFace()
+            delay(640)
+            stepLabel = null
+            railActive = -1
             busy = false
         }
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF050605))
-            .padding(top = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        AlgorithmScanBackdrop(Modifier.matchParentSize())
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -304,6 +331,19 @@ private fun TerminalConsole(
             color = if (privateOn) NeonMagenta else NeonCyan,
             fontFamily = FontFamily.Monospace,
             fontSize = 12.sp
+        )
+        if (stepLabel != null) {
+            Text(
+                stepLabel!!,
+                color = NeonLime,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp
+            )
+        }
+        AlgorithmRail(
+            steps = if (busy) railSteps else algorithmSteps(privateOn),
+            active = railActive
         )
         Text(
             "Encrypted apart from Chat. English commands. Analyst voice by default.",
@@ -372,6 +412,7 @@ private fun TerminalConsole(
                 singleLine = true
             )
             Button(onClick = { send() }, enabled = !busy) { Text("Run") }
+        }
         }
     }
 }

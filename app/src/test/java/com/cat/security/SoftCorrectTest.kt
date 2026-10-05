@@ -34,4 +34,13 @@ class SoftCorrectTest {
         assertEquals("clear", SoftCorrect.apply("cler").text)
         assertEquals("unlock help", SoftCorrect.apply("unlok hlep").text)
     }
+
+    @Test
+    fun fuzzyFixesNearCommandButNotOrdinaryEnglish() {
+        assertEquals("help", SoftCorrect.apply("helpx").text)
+        assertEquals("remember the pin rule", SoftCorrect.apply("remeberr the pin rule").text)
+        assertEquals("status", SoftCorrect.apply("stattus").text)
+        assertFalse(SoftCorrect.apply("clean the kettle").changed)
+        assertEquals("clean the kettle", SoftCorrect.apply("clean the kettle").text)
+    }
 }

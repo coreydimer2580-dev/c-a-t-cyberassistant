@@ -202,6 +202,19 @@ class CopilotEngineTest {
     }
 
     @Test
+    fun terminalRanksMatchingMemoryWithItsTag() {
+        val outcome = engine.respondForTerminal(
+            "where is tea",
+            emptyList(),
+            listOf("the kettle is blue", "tea is at 4"),
+            memoryTags = listOf("False", "True")
+        )
+        assertTrue(outcome.reply.contains("[True] tea is at 4"))
+        assertFalse(outcome.reply.contains("[True] the kettle"))
+        assertFalse(outcome.reply.contains("[False] tea is at 4"))
+    }
+
+    @Test
     fun terminalClearFlag() {
         val outcome = engine.respondForTerminal("/clear", listOf("user" to "secret"), emptyList())
         assertTrue(outcome.clearVault)

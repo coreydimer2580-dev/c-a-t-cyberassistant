@@ -80,7 +80,37 @@ object SoftCorrect {
         "ulock" to "unlock",
         "unloock" to "unlock",
         "comand" to "command",
-        "commnd" to "command"
+        "commnd" to "command",
+        "hlpe" to "help",
+        "helb" to "help",
+        "remmeber" to "remember",
+        "remeberr" to "remember",
+        "recal1" to "recall",
+        "stattus" to "status",
+        "ststus" to "status",
+        "verisonn" to "version",
+        "versiom" to "version",
+        "unlck" to "unlock",
+        "sumarize" to "summarize",
+        "summarze" to "summarize",
+        "summrize" to "summarize",
+        "seting" to "settings",
+        "toools" to "tools",
+        "todoo" to "todo"
+    )
+
+    /** Command words fuzzy repair may approach. Not general English. */
+    private val fuzzyTargets = listOf(
+        "help", "remember", "recall", "status", "version", "clear",
+        "unlock", "summarize", "settings", "tools", "todo"
+    )
+
+    /** Near-miss English that must stay as typed. */
+    private val fuzzyDeny = setOf(
+        "clean", "clever", "clearly", "held", "helm", "heap", "hello",
+        "states", "static", "statue", "versus", "verses", "unless",
+        "summary", "summer", "start", "store", "story", "still",
+        "total", "today", "toolshed"
     )
 
     private val commands = words.values.toSet()
@@ -95,7 +125,7 @@ object SoftCorrect {
         val head = body.substringBefore(' ')
         val rest = if (' ' in body) body.substringAfter(' ') else ""
         val key = head.lowercase()
-        val mappedHead = words[key]
+        val mappedHead = words[key] ?: fuzzyCommand(key)
         val headIsCommand = mappedHead != null || key in commands
         if (!headIsCommand) return Result(original, false, null)
 
@@ -116,6 +146,41 @@ object SoftCorrect {
             }
         }
         return Result(text = text, changed = true, note = note)
+    }
+
+    /** One-edit (or two on a long token) repair toward a command, same first letter. */
+    private fun fuzzyCommand(token: String): String? {
+        if (token.length < 4 || token in fuzzyDeny || token in commands) return null
+        if (!token.all { it.isLetter() }) return null
+        var best: String? = null
+        var bestDistance = Int.MAX_VALUE
+        for (target in fuzzyTargets) {
+            if (token[0] != target[0]) continue
+            if (kotlin.math.abs(token.length - target.length) > 2) continue
+            val distance = editDistance(token, target)
+            val limit = if (token.length >= 8) 2 else 1
+            if (distance in 1..limit && distance < bestDistance) {
+                best = target
+                bestDistance = distance
+            }
+        }
+        return best
+    }
+
+    private fun editDistance(a: String, b: String): Int {
+        var prev = IntArray(b.length + 1) { it }
+        var curr = IntArray(b.length + 1)
+        for (i in a.indices) {
+            curr[0] = i + 1
+            for (j in b.indices) {
+                val cost = if (a[i] == b[j]) 0 else 1
+                curr[j + 1] = minOf(curr[j] + 1, prev[j + 1] + 1, prev[j] + cost)
+            }
+            val swap = prev
+            prev = curr
+            curr = swap
+        }
+        return prev[b.length]
     }
 
     private fun fixTail(rest: String): Triple<String, Boolean, String> {

@@ -387,15 +387,15 @@ class CopilotEngine(
         todos: List<String> = emptyList(),
         memoryTags: List<String> = emptyList(),
         persona: AiPersona = AiPersona.OFFLINE_CAT,
-        versionName: String = "1.9",
-        versionCode: Int = 14,
+        versionName: String = "1.10",
+        versionCode: Int = 15,
         online: Boolean = false,
         privateMode: Boolean = false
     ): TerminalOutcome {
         val clean = filter.sanitize(userText).trim()
         val voice = terminalVoice(persona)
         if (clean.isEmpty()) {
-            return pack(voice, "C@T Terminal. Type help, or tap a command chip.", vaultLines, memories, memoryTags)
+            return pack(voice, "C@T Terminal. Type help, or tap a command chip.", vaultLines, memories, memoryTags, query = clean)
         }
         val lower = clean.lowercase()
         val body = if (clean.startsWith("/")) clean.drop(1).trim() else clean
@@ -404,7 +404,7 @@ class CopilotEngine(
         val slash = clean.startsWith("/")
 
         if (slash && cmd == "help" || lower == "help" || isHelp(lower)) {
-            return pack(voice, TERMINAL_HELP, vaultLines, memories, memoryTags)
+            return pack(voice, TERMINAL_HELP, vaultLines, memories, memoryTags, query = clean)
         }
         if (cmd == "clear" && (arg.isEmpty() || slash)) {
             return pack(
@@ -413,7 +413,8 @@ class CopilotEngine(
                 emptyList(),
                 memories,
                 memoryTags,
-                clearVault = true
+                clearVault = true,
+                query = clean
             )
         }
         if (cmd == "status" && (arg.isEmpty() || slash)) {
@@ -432,7 +433,7 @@ class CopilotEngine(
                 Terminal default voice is Analyst unless the Wheel names Coder, Coach, or Creative.
                 English Terminal. Not a system shell.
             """.trimIndent()
-            return pack(voice, status, vaultLines, memories, memoryTags)
+            return pack(voice, status, vaultLines, memories, memoryTags, query = clean)
         }
         if (cmd == "version" && (arg.isEmpty() || slash)) {
             return pack(
@@ -440,15 +441,16 @@ class CopilotEngine(
                 "C@T $versionName (build $versionCode). English Terminal, not a system shell.",
                 vaultLines,
                 memories,
-                memoryTags
+                memoryTags,
+                query = clean
             )
         }
         if (cmd == "unlock" && (arg.isEmpty() || slash || arg.lowercase().startsWith("help"))) {
-            return pack(voice, UNLOCK_HELP, vaultLines, memories, memoryTags)
+            return pack(voice, UNLOCK_HELP, vaultLines, memories, memoryTags, query = clean)
         }
 
         val base = dispatch(clean, vaultLines, memories, todos, memoryTags, voice)
-        val reply = attachTerminalContext(ensureVoice(voice, base.reply), vaultLines, memories, memoryTags)
+        val reply = attachTerminalContext(ensureVoice(voice, base.reply), vaultLines, memories, memoryTags, clean)
         val spoken = if (privateMode && !base.skipCloud) {
             reply + "\nPrivate is on. This answer stayed on the phone. No cloud."
         } else {
@@ -471,31 +473,53 @@ class CopilotEngine(
         reply: String,
         vaultLines: List<Pair<String, String>>,
         memories: List<String>,
-        tags: List<String>
+        tags: List<String>,
+        query: String = ""
     ): String {
         if (reply.contains("\n— memories:")) return reply
         val memBlock = if (memories.isEmpty()) {
             "memories: none yet (say remember <fact>)"
         } else {
-            val bits = memories.take(3).mapIndexed { index, note ->
-                val tag = tags.getOrNull(index)
+            val bits = rankMemories(memories, tags, query).take(4).map { (note, tag) ->
+                val mark = tag
                     ?.takeIf { it.isNotBlank() }
                     ?.let { "[${com.cat.data.TruthTag.normalize(it)}] " }
                     .orEmpty()
-                "$tag${note.replace("\n", " ").take(90)}"
+                "$mark${note.replace("\n", " ").take(90)}"
             }.joinToString(" · ")
             "memories (${memories.size}): $bits"
         }
         val vaultBlock = if (vaultLines.isEmpty()) {
             "vault: no earlier lines"
         } else {
-            val bits = vaultLines.takeLast(3).joinToString(" · ") { (role, content) ->
+            val bits = vaultLines.takeLast(4).joinToString(" · ") { (role, content) ->
                 val who = if (role == "user") "you" else "C@T"
-                "$who: ${content.replace("\n", " ").take(70)}"
+                "$who: ${content.replace("\n", " ").take(80)}"
             }
             "vault (${vaultLines.size}): $bits"
         }
         return reply.trimEnd() + "\n— $memBlock\n— $vaultBlock"
+    }
+
+    /** Prefer notes that share words with the question. Tags stay on their note. */
+    private fun rankMemories(
+        memories: List<String>,
+        tags: List<String>,
+        query: String
+    ): List<Pair<String, String?>> {
+        val wanted = query.lowercase()
+            .split(Regex("[^a-z0-9]+"))
+            .filter { it.length > 2 }
+            .toSet()
+        return memories.mapIndexed { index, note ->
+            val score = if (wanted.isEmpty()) {
+                0
+            } else {
+                note.lowercase().split(Regex("[^a-z0-9]+")).count { it in wanted }
+            }
+            Triple(score, index, note to tags.getOrNull(index))
+        }.sortedWith(compareByDescending<Triple<Int, Int, Pair<String, String?>>> { it.first }.thenBy { it.second })
+            .map { it.third }
     }
 
     private fun pack(
@@ -504,10 +528,11 @@ class CopilotEngine(
         vaultLines: List<Pair<String, String>>,
         memories: List<String>,
         tags: List<String>,
-        clearVault: Boolean = false
+        clearVault: Boolean = false,
+        query: String = ""
     ): TerminalOutcome {
         return TerminalOutcome(
-            reply = attachTerminalContext(ensureVoice(voice, body), vaultLines, memories, tags),
+            reply = attachTerminalContext(ensureVoice(voice, body), vaultLines, memories, tags, query),
             skipCloud = true,
             clearVault = clearVault
         )
@@ -635,8 +660,9 @@ class CopilotEngine(
             - todo <item> — checklist
             - hash, b64, json, convert, pass — local text tools
 
-            Typo repair fixes the command word (hlp, remeber, recell, staus, verson, unlok, cler).
-            Every reply includes saved Room memories and recent encrypted vault lines.
+            Typo repair fixes the command word, including near-misses (hlp, helpx, remeberr, stattus, unlck). Ordinary sentences stay as typed.
+            Every reply includes saved Room memories (notes that share your words first) and recent encrypted vault lines.
+            The algorithm rail lights INPUT, CORRECT, MEMORY, then REPLY. PRIVATE lights only when Private is on. It is a trace, not a self-build.
             Terminal voice defaults to Analyst. Coder, Coach, or Creative apply when the Wheel names them.
             Cloud is optional in Settings. Offline still answers.
             The PIN lock is separate from Chat. This transcript is AES-GCM and never writes chat history.
