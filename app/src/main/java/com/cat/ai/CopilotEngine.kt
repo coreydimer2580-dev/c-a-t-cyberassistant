@@ -367,6 +367,158 @@ class CopilotEngine(
     }
 
 
+    data class TerminalOutcome(
+        val reply: String,
+        val memoryToSave: String? = null,
+        val todoToAdd: String? = null,
+        val skipCloud: Boolean = true,
+        val clearVault: Boolean = false
+    )
+
+    /**
+     * English Terminal reply. Mode personas (Offline / Cloud / Auto) speak as Analyst.
+     * Named wheel personas keep their own voice. Every reply carries Room memories
+     * and recent vault lines. This is not a shell.
+     */
+    fun respondForTerminal(
+        userText: String,
+        vaultLines: List<Pair<String, String>>,
+        memories: List<String>,
+        todos: List<String> = emptyList(),
+        memoryTags: List<String> = emptyList(),
+        persona: AiPersona = AiPersona.OFFLINE_CAT,
+        versionName: String = "1.9",
+        versionCode: Int = 14,
+        online: Boolean = false,
+        privateMode: Boolean = false
+    ): TerminalOutcome {
+        val clean = filter.sanitize(userText).trim()
+        val voice = terminalVoice(persona)
+        if (clean.isEmpty()) {
+            return pack(voice, "C@T Terminal. Type help, or tap a command chip.", vaultLines, memories, memoryTags)
+        }
+        val lower = clean.lowercase()
+        val body = if (clean.startsWith("/")) clean.drop(1).trim() else clean
+        val cmd = body.substringBefore(' ').lowercase()
+        val arg = if (' ' in body) body.substringAfter(' ').trim() else ""
+        val slash = clean.startsWith("/")
+
+        if (slash && cmd == "help" || lower == "help" || isHelp(lower)) {
+            return pack(voice, TERMINAL_HELP, vaultLines, memories, memoryTags)
+        }
+        if (cmd == "clear" && (arg.isEmpty() || slash)) {
+            return pack(
+                voice,
+                "Transcript cleared. English Terminal stays ready. Chat is untouched. Not a shell.",
+                emptyList(),
+                memories,
+                memoryTags,
+                clearVault = true
+            )
+        }
+        if (cmd == "status" && (arg.isEmpty() || slash)) {
+            val net = when {
+                privateMode -> "private · offline (cloud blocked)"
+                online -> "online"
+                else -> "offline"
+            }
+            val status = """
+                status: $net
+                version: $versionName (build $versionCode)
+                memories: ${memories.size}
+                vault lines: ${vaultLines.size}
+                persona: ${voice.label}
+                private: ${if (privateMode) "on" else "off"}
+                Terminal default voice is Analyst unless the Wheel names Coder, Coach, or Creative.
+                English Terminal. Not a system shell.
+            """.trimIndent()
+            return pack(voice, status, vaultLines, memories, memoryTags)
+        }
+        if (cmd == "version" && (arg.isEmpty() || slash)) {
+            return pack(
+                voice,
+                "C@T $versionName (build $versionCode). English Terminal, not a system shell.",
+                vaultLines,
+                memories,
+                memoryTags
+            )
+        }
+        if (cmd == "unlock" && (arg.isEmpty() || slash || arg.lowercase().startsWith("help"))) {
+            return pack(voice, UNLOCK_HELP, vaultLines, memories, memoryTags)
+        }
+
+        val base = dispatch(clean, vaultLines, memories, todos, memoryTags, voice)
+        val reply = attachTerminalContext(ensureVoice(voice, base.reply), vaultLines, memories, memoryTags)
+        val spoken = if (privateMode && !base.skipCloud) {
+            reply + "\nPrivate is on. This answer stayed on the phone. No cloud."
+        } else {
+            reply
+        }
+        return TerminalOutcome(
+            reply = spoken,
+            memoryToSave = base.memoryToSave,
+            todoToAdd = base.todoToAdd,
+            skipCloud = base.skipCloud || privateMode,
+            clearVault = false
+        )
+    }
+
+    fun terminalVoice(persona: AiPersona): AiPersona {
+        return if (persona.isModePersona) AiPersona.ANALYST else persona
+    }
+
+    fun attachTerminalContext(
+        reply: String,
+        vaultLines: List<Pair<String, String>>,
+        memories: List<String>,
+        tags: List<String>
+    ): String {
+        if (reply.contains("\n— memories:")) return reply
+        val memBlock = if (memories.isEmpty()) {
+            "memories: none yet (say remember <fact>)"
+        } else {
+            val bits = memories.take(3).mapIndexed { index, note ->
+                val tag = tags.getOrNull(index)
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { "[${com.cat.data.TruthTag.normalize(it)}] " }
+                    .orEmpty()
+                "$tag${note.replace("\n", " ").take(90)}"
+            }.joinToString(" · ")
+            "memories (${memories.size}): $bits"
+        }
+        val vaultBlock = if (vaultLines.isEmpty()) {
+            "vault: no earlier lines"
+        } else {
+            val bits = vaultLines.takeLast(3).joinToString(" · ") { (role, content) ->
+                val who = if (role == "user") "you" else "C@T"
+                "$who: ${content.replace("\n", " ").take(70)}"
+            }
+            "vault (${vaultLines.size}): $bits"
+        }
+        return reply.trimEnd() + "\n— $memBlock\n— $vaultBlock"
+    }
+
+    private fun pack(
+        voice: AiPersona,
+        body: String,
+        vaultLines: List<Pair<String, String>>,
+        memories: List<String>,
+        tags: List<String>,
+        clearVault: Boolean = false
+    ): TerminalOutcome {
+        return TerminalOutcome(
+            reply = attachTerminalContext(ensureVoice(voice, body), vaultLines, memories, tags),
+            skipCloud = true,
+            clearVault = clearVault
+        )
+    }
+
+    private fun ensureVoice(voice: AiPersona, reply: String): String {
+        val lenses = listOf("Analyst lens", "Coder lens", "Coach lens", "Creative lens")
+        if (lenses.any { reply.startsWith(it) }) return reply
+        return styleReply(voice, reply)
+    }
+
     private fun styleReply(persona: AiPersona, body: String): String {
         if (persona == AiPersona.OFFLINE_CAT || persona.isModePersona) {
             return body
@@ -463,6 +615,40 @@ class CopilotEngine(
             - Call or text via your own dialer and SMS app
             Chat: /time /hash /b64 /json /convert /pass /todo /call /sms
             C@T does not run a carrier-free message network.
+        """.trimIndent()
+
+        val TERMINAL_HELP = """
+            C@T English Terminal. Australia/Perth, en-AU. Not a system shell.
+            No packages, no path building, no other-app scan, no self-update.
+
+            Commands (a slash is optional):
+            - help — this guide
+            - remember <fact> — hard-save a note on this phone
+            - recall — list saved memories and your True / False / Unsure tags
+            - time — Australia/Perth clock
+            - status — online or offline, version, memory count, vault size, persona
+            - version — build name and code
+            - clear — wipe this Terminal transcript only (Chat stays)
+            - unlock — how the PIN lock works
+            - summarize — snapshot of this Terminal thread
+            - tools — on-phone utilities
+            - todo <item> — checklist
+            - hash, b64, json, convert, pass — local text tools
+
+            Typo repair fixes the command word (hlp, remeber, recell, staus, verson, unlok, cler).
+            Every reply includes saved Room memories and recent encrypted vault lines.
+            Terminal voice defaults to Analyst. Coder, Coach, or Creative apply when the Wheel names them.
+            Cloud is optional in Settings. Offline still answers.
+            The PIN lock is separate from Chat. This transcript is AES-GCM and never writes chat history.
+            Private ON forces offline answers, blocks cloud, and blanks this app in the recents card.
+        """.trimIndent()
+
+        val UNLOCK_HELP = """
+            Terminal PIN is 4 to 8 digits. C@T stores a salted hash, not the PIN.
+            Unlock lasts until you tap Lock or this app process ends.
+            Chat is a different tab and does not use this PIN.
+            Too many wrong tries slow the gate down.
+            This screen is English AI, not a shell.
         """.trimIndent()
     }
 }

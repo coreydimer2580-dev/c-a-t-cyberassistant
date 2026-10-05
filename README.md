@@ -1,6 +1,6 @@
 # C@T - Cyber AI Assistant
 
-Version 1.8.1 — locked Terminal as home, apart from Chat. Kotlin, Jetpack Compose, Room. Neon cyan, magenta, and lime on black.
+Version 1.9 — smartest English Terminal, with a Private switch. Kotlin, Jetpack Compose, Room. Neon cyan, magenta, and lime on black.
 
 Opens on **Terminal**. Primary tabs: **Terminal · Chat · Wheel · Memory · Settings**.
 
@@ -10,15 +10,19 @@ Opens on **Terminal**. Primary tabs: **Terminal · Chat · Wheel · Memory · Se
 - PIN gate (4–8 digits). Unlock lasts until you tap Lock or the app process ends.
 - PIN is a salted SHA-256 in encrypted preferences. The PIN itself is not stored.
 - Transcript is AES-GCM in its own file. The key lives in encrypted preferences. It never writes Chat history.
-- English AI (`C@T>`), offline or your cloud endpoint. Obvious command typos are auto-corrected.
-- Not a system shell. No Termux, no self-update, no background web scan.
+- English AI (`C@T>`). Default voice is Analyst. Coder, Coach, and Creative still apply when the Wheel names them.
+- Every reply includes saved Room memories and recent vault lines.
+- Command typos are repaired (`hlp`, `remeber`, `staus`, `verson`, `unlok`, `cler`).
+- Status line shows online/offline, version, and memory count. Chips: `/help`, `/recall`, `/status`.
+- **Private** ON forces offline answers (no cloud, no online search) and sets `FLAG_SECURE` so the recents card is blank while Terminal is open.
+- Not a system shell. No Termux, no packages, no self-update, no background web scan.
 
 ## AI product
 
 - **Chat** — sticky composer, typing indicator, persona labels, thin system strip
 - **Autopilot** — speaks replies (TTS en-AU) and **one** follow-up chip, then waits for you
 - **Evolve** — ranks recent chat + saved notes into a short "best so far" Unsure memory
-- **Online evolve** (optional, Chat only) — public Wikipedia / DuckDuckGo Instant Answer only. Never browser history, OneDrive, or other apps
+- **Online evolve** (optional, Chat only) — public Wikipedia / DuckDuckGo Instant Answer only. Never browser history, OneDrive, or other apps. Terminal Private does not use this.
 - **AI Wheel** — Offline C@T, Cloud GPT, Auto, Analyst, Coder, Coach, Creative
 - **Group solver** — Analyst + Coder + Coach (and Cloud if mode allows) → merged verdict
 - **Memory** — Room notes on this phone (True / False / Unsure). No expiry

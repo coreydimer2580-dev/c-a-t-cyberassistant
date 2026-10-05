@@ -123,6 +123,13 @@ class CopilotPrefs(context: Context) {
         prefs.edit().putString(KEY_TERM_AES, base64).apply()
     }
 
+    /** Terminal only. When true, replies stay on device and the recents card is blanked. */
+    var terminalPrivate: Boolean
+        get() = prefs.getBoolean(KEY_TERM_PRIVATE, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_TERM_PRIVATE, value).apply()
+        }
+
     private fun openEncrypted(context: Context): SharedPreferences {
         val masterKey = MasterKey.Builder(context)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
@@ -153,5 +160,6 @@ class CopilotPrefs(context: Context) {
         private const val KEY_TERM_FAILS = "term_fails"
         private const val KEY_TERM_COOLDOWN = "term_cooldown"
         private const val KEY_TERM_AES = "term_aes_key"
+        private const val KEY_TERM_PRIVATE = "term_private"
     }
 }

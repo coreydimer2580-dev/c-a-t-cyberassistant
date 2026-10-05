@@ -33,39 +33,84 @@ class CopilotRepository(
 
     suspend fun history(): List<ChatMessage> = database.chatDao().getAll()
 
-    data class TerminalAnswer(val reply: String, val notice: String?)
+    data class TerminalAnswer(val reply: String, val notice: String?, val clearVault: Boolean = false)
+
+    data class TerminalFace(
+        val online: Boolean,
+        val memoryCount: Int,
+        val voice: String,
+        val privateMode: Boolean
+    )
+
+    /** Status strip for the Terminal screen. Does not touch the network beyond a local capability check. */
+    suspend fun terminalFace(): TerminalFace {
+        val count = database.memoryDao().count()
+        val privateMode = prefs.terminalPrivate
+        val online = !privateMode && runCatching { networkAvailable() }.getOrDefault(false)
+        val voice = engine.terminalVoice(prefs.persona).shortLabel
+        return TerminalFace(online, count, voice, privateMode)
+    }
 
     /**
      * English AI reply for the locked terminal screen.
+     * Uses Room memories and the vault lines the caller passes.
      * Does not write ChatDao, does not evolve, and does not search the web.
      */
-    suspend fun answerTerminal(userText: String, prior: List<Pair<String, String>>): TerminalAnswer {
+    suspend fun answerTerminal(
+        userText: String,
+        prior: List<Pair<String, String>>,
+        versionName: String,
+        versionCode: Int
+    ): TerminalAnswer {
         val prepared = engine.prepare(userText)
         if (prepared.text.isBlank()) return TerminalAnswer("Nothing to send.", null)
         val (lines, tags) = taggedMemory()
         val persona = prefs.persona
-        val offline = engine.respond(prepared.text, prior, lines, todoLines(), tags, persona)
-        if (!offline.memoryToSave.isNullOrBlank()) {
+        val privateMode = prefs.terminalPrivate
+        val online = !privateMode && runCatching { networkAvailable() }.getOrDefault(false)
+        val outcome = engine.respondForTerminal(
+            prepared.text,
+            prior,
+            lines,
+            todoLines(),
+            tags,
+            persona,
+            versionName,
+            versionCode,
+            online,
+            privateMode
+        )
+        if (!outcome.memoryToSave.isNullOrBlank()) {
             database.memoryDao().insert(
                 MemoryEntity(
-                    content = offline.memoryToSave,
+                    content = outcome.memoryToSave,
                     category = "terminal",
                     createdAt = System.currentTimeMillis(),
                     truthTag = TruthTag.UNSURE
                 )
             )
         }
-        if (!offline.todoToAdd.isNullOrBlank()) {
-            prefs.saveTodos(prefs.loadTodos() + (false to offline.todoToAdd))
+        if (!outcome.todoToAdd.isNullOrBlank()) {
+            prefs.saveTodos(prefs.loadTodos() + (false to outcome.todoToAdd))
         }
-        val spoken = if (offline.memoryToSave.isNullOrBlank()) {
-            offline.reply.removeSuffix(EVOLVE_TRAILER).trimEnd()
-        } else {
-            offline.reply
+        if (privateMode || outcome.clearVault || outcome.skipCloud) {
+            val notice = if (privateMode) "Private. Offline only. No cloud." else null
+            return TerminalAnswer(outcome.reply, notice, outcome.clearVault)
         }
+        val offline = CopilotEngine.OfflineResult(
+            reply = outcome.reply,
+            memoryToSave = outcome.memoryToSave,
+            skipCloud = false,
+            todoToAdd = outcome.todoToAdd
+        )
         val history = prior + ("user" to prepared.text)
-        val (reply, notice) = resolveTerminal(spoken, offline, persona, history)
-        return TerminalAnswer(reply, notice)
+        val (reply, notice) = resolveTerminal(outcome.reply, offline, persona, history)
+        val finalReply = if (reply == outcome.reply) {
+            reply
+        } else {
+            engine.attachTerminalContext(reply, prior, lines, tags)
+        }
+        return TerminalAnswer(finalReply, notice, false)
     }
 
     suspend fun clear(): Turn {

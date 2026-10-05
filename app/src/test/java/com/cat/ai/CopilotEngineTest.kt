@@ -143,4 +143,70 @@ class CopilotEngineTest {
         assertNull(result.memoryToSave)
     }
 
+    @Test
+    fun terminalHelpIsEnglishNotAShell() {
+        val outcome = engine.respondForTerminal("help", emptyList(), emptyList(), versionName = "1.9", versionCode = 14)
+        assertTrue(outcome.reply.contains("Not a system shell"))
+        assertTrue(outcome.reply.contains("remember"))
+        assertTrue(outcome.reply.contains("Analyst lens"))
+        assertTrue(outcome.reply.contains("Private"))
+        assertTrue(outcome.skipCloud)
+        assertTrue(outcome.reply.contains("memories:"))
+        assertTrue(outcome.reply.contains("vault:"))
+    }
+
+    @Test
+    fun terminalReplyCarriesMemoryAndVault() {
+        val outcome = engine.respondForTerminal(
+            "where is tea",
+            listOf("user" to "tea later", "assistant" to "noted"),
+            listOf("tea is at 4"),
+            memoryTags = listOf("True")
+        )
+        assertTrue(outcome.reply.contains("tea is at 4"))
+        assertTrue(outcome.reply.contains("[True]"))
+        assertTrue(outcome.reply.contains("vault"))
+        assertTrue(outcome.reply.contains("Analyst lens"))
+    }
+
+    @Test
+    fun terminalKeepsNamedPersona() {
+        val outcome = engine.respondForTerminal("hello", emptyList(), emptyList(), persona = AiPersona.CODER)
+        assertTrue(outcome.reply.contains("Coder lens"))
+        assertFalse(outcome.reply.contains("Analyst lens"))
+    }
+
+    @Test
+    fun terminalStatusAndPrivateOffline() {
+        val status = engine.respondForTerminal(
+            "status",
+            listOf("user" to "hi"),
+            listOf("a fact"),
+            versionName = "1.9",
+            versionCode = 14,
+            online = true,
+            privateMode = true
+        )
+        assertTrue(status.reply.contains("private"))
+        assertTrue(status.reply.contains("1.9"))
+        assertTrue(status.reply.contains("memories: 1"))
+        assertTrue(status.skipCloud)
+        val open = engine.respondForTerminal(
+            "where is the kettle",
+            emptyList(),
+            emptyList(),
+            privateMode = true
+        )
+        assertTrue(open.skipCloud)
+        assertTrue(open.reply.contains("Private is on"))
+    }
+
+    @Test
+    fun terminalClearFlag() {
+        val outcome = engine.respondForTerminal("/clear", listOf("user" to "secret"), emptyList())
+        assertTrue(outcome.clearVault)
+        assertTrue(outcome.reply.contains("cleared"))
+        assertFalse(outcome.reply.contains("secret"))
+    }
+
 }

@@ -26,4 +26,12 @@ class SoftCorrectTest {
         val result = SoftCorrect.apply("remeber tea at 4")
         assertEquals("remember tea at 4", result.text)
     }
+
+    @Test
+    fun fixesStatusVersionClearUnlock() {
+        assertEquals("status", SoftCorrect.apply("staus").text)
+        assertEquals("/version", SoftCorrect.apply("/verson").text)
+        assertEquals("clear", SoftCorrect.apply("cler").text)
+        assertEquals("unlock help", SoftCorrect.apply("unlok hlep").text)
+    }
 }
