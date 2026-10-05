@@ -226,6 +226,20 @@ class CopilotEngineTest {
     }
 
     @Test
+    fun terminalRanksSharedSlangAboveAnUnrelatedNote() {
+        val outcome = engine.respondForTerminal(
+            "yeah heaps keen",
+            emptyList(),
+            listOf("the kettle is blue", "arvo tea is heaps good"),
+            memoryTags = listOf("Unsure", "Unsure")
+        )
+        val slang = outcome.reply.indexOf("heaps good")
+        val kettle = outcome.reply.indexOf("kettle")
+        assertTrue(slang >= 0)
+        if (kettle >= 0) assertTrue(slang < kettle)
+    }
+
+    @Test
     fun terminalUsedMemoryHintRanksRelevantNote() {
         val outcome = engine.respondForTerminal(
             "where is tea",

@@ -239,6 +239,7 @@ private fun welcomeLines(): List<TerminalLine> {
         Replies rank saved memories that share your words and say how many were used.
         Evolve path: YOU, SoftCorrect, MEMORY, REPLY, then an Evolve note when one is saved. Trace only — this app does not update itself.
         Private ON stays offline, blocks cloud, and hides this screen in recents.
+        Slang you type can land in an Evolve note. Speech stays on Chat, not here. No mic.
         Chat stays a separate tab. PIN lock stays on this transcript.
     """.trimIndent()
     return listOf(TerminalLine("sys", text, now))

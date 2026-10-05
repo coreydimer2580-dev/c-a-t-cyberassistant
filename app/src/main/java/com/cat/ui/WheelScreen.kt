@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cat.CAtApplication
+import com.cat.ProductGuide
 import com.cat.ai.AiPersona
 import com.cat.ui.theme.Mist
 import com.cat.ui.theme.NeonCyan
@@ -50,8 +51,9 @@ fun WheelScreen(wide: Boolean) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text("AI Wheel", color = NeonCyan, fontSize = 28.sp, fontWeight = FontWeight.Black)
+        Text(ProductGuide.PATH, color = NeonLime, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Text(
-            "Spin to pick who answers next. Offline C@T always works. Cloud needs a free endpoint in Settings.",
+            "Spin to pick who answers next. Offline C@T always works. Cloud needs a saved address in Settings. Speech stays on Chat.",
             color = Mist,
             fontSize = 13.sp,
             modifier = Modifier.padding(horizontal = 8.dp)

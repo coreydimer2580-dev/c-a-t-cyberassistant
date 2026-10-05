@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cat.CAtApplication
+import com.cat.ProductGuide
 import com.cat.data.MemoryEntity
 import com.cat.data.MemoryStorage
 import com.cat.data.TruthTag
@@ -145,13 +146,21 @@ private fun NotesPane(
     onClear: () -> Unit,
     onRetag: (MemoryEntity) -> Unit
 ) {
-    val evolving = notes.filter { it.category == "learn" }
-    val hard = notes.filter { it.category != "learn" }
+    val styleIds = notes.filter { note ->
+        val body = note.content.trim()
+        body.startsWith("best so far:", ignoreCase = true) ||
+            body.contains("style:", ignoreCase = true)
+    }.map { it.id }.toSet()
+    val styleNotes = notes.filter { it.id in styleIds }
+    val rest = notes.filter { it.id !in styleIds }
+    val evolving = rest.filter { it.category == "learn" }
+    val hard = rest.filter { it.category != "learn" }
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text("C@T hard save", color = NeonCyan, fontSize = 28.sp, fontWeight = FontWeight.Black)
+        Text(ProductGuide.PATH, color = NeonLime, fontWeight = FontWeight.Bold, fontSize = 13.sp)
         Text(storage.label, color = NeonMagenta, fontWeight = FontWeight.Bold)
         storage.warning?.let { warning ->
             Text(warning, color = NeonLime, fontWeight = FontWeight.Bold)
@@ -188,6 +197,20 @@ private fun NotesPane(
                 .weight(1f),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            item {
+                Text("How you talk", color = NeonLime, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                Text(
+                    "Evolve notes that kept words you actually typed. Not invented slang. Not a self-update.",
+                    color = Color(0xFFBFE8FF),
+                    fontSize = 13.sp
+                )
+            }
+            if (styleNotes.isEmpty()) {
+                item { Text("No style notes yet. Type the way you talk in Terminal or Chat.", color = Color(0xFFBFE8FF)) }
+            }
+            items(styleNotes, key = { "style-${it.id}" }) { note ->
+                NoteCard(note, note.id == flashId, onRetag)
+            }
             item {
                 Text("Evolving memory", color = NeonMagenta, fontWeight = FontWeight.Black, fontSize = 18.sp)
                 Text(

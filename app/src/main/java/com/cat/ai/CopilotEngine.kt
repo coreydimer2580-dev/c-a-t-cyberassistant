@@ -387,8 +387,8 @@ class CopilotEngine(
         todos: List<String> = emptyList(),
         memoryTags: List<String> = emptyList(),
         persona: AiPersona = AiPersona.OFFLINE_CAT,
-        versionName: String = "1.12",
-        versionCode: Int = 17,
+        versionName: String = "1.13",
+        versionCode: Int = 18,
         online: Boolean = false,
         privateMode: Boolean = false
     ): TerminalOutcome {
@@ -545,6 +545,8 @@ class CopilotEngine(
                 val phrase = wanted.take(3).joinToString(" ")
                 if (hay.contains(phrase)) score += 4
             }
+            val sharedStyle = EvolveEngine.styleTokens(query).intersect(EvolveEngine.styleTokens(note))
+            if (sharedStyle.isNotEmpty()) score += sharedStyle.size * 2
             val tag = tags.getOrNull(index)
             when (com.cat.data.TruthTag.normalize(tag.orEmpty())) {
                 "True" -> if (score > 0) score += 2
@@ -703,6 +705,8 @@ class CopilotEngine(
             Cloud is optional in Settings. Offline still answers.
             The PIN lock is separate from Chat. This transcript is AES-GCM and never writes chat history.
             Private ON forces offline answers, blocks cloud and online lookup, and blanks this app in the recents card.
+            Phrases you actually type (slang and style) can be saved as an Evolve note. They are not invented.
+            Autopilot speech is the Chat tab only. This Terminal does not speak and does not use the microphone.
         """.trimIndent()
 
         val UNLOCK_HELP = """

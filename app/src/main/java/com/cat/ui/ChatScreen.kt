@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.sp
 import com.cat.CAtApplication
 import com.cat.ai.AiPersona
 import com.cat.ai.CopilotMode
+import com.cat.ProductGuide
 import com.cat.ai.SpeechHelper
 import com.cat.data.ChatMessage
 import com.cat.data.MemoryEntity
@@ -400,7 +401,7 @@ private fun SystemStrip(
                 StatusChip(evolveStatus.take(28), NeonLime)
             }
             StatusChip(
-                label = if (autopilot) "Autopilot ON" else "Autopilot",
+                label = if (autopilot) "Speak ON · Chat" else "Speak · Chat",
                 accent = if (autopilot) NeonLime else Mist,
                 selected = autopilot,
                 onClick = { onAutopilot(!autopilot) }
@@ -422,7 +423,7 @@ private fun SystemStrip(
             }
         }
         Text(
-            "Online evolve runs only when you send. Not in the background. This app does not update itself.",
+            ProductGuide.SPEECH + " Online evolve runs only when you send. Not in the background. This app does not update itself.",
             color = Color(0xFF8FB8A0),
             fontSize = 11.sp
         )
@@ -475,7 +476,8 @@ private fun EmptyChatHint(persona: AiPersona, group: Boolean, autopilot: Boolean
             fontFamily = FontFamily.Monospace,
             fontSize = 12.sp
         )
-        Text("C@T> type below. Offline works. Evolve learns from this chat.", color = Paper, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+        Text("C@T> type below. Offline works. " + ProductGuide.PATH + ".", color = Paper, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+        Text("C@T> speech is this tab only. Terminal does not speak.", color = Mist, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
         Text("C@T> try: /help · /remember tea is at 4 · plan my day", color = NeonCyan, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
     }
 }

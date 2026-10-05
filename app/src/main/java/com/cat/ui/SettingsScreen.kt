@@ -29,6 +29,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cat.CAtApplication
+import com.cat.ProductGuide
 import com.cat.ai.CopilotMode
 import com.cat.ai.SensitiveFilter
 import com.cat.data.CopilotPrefs
@@ -52,6 +53,7 @@ fun SettingsScreen(
             .padding(top = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        HowItFits()
         CopilotSettings()
         TerminalPinSettings()
         if (onOpenTools != null) {
@@ -66,6 +68,18 @@ fun SettingsScreen(
     }
 }
 
+
+@Composable
+private fun HowItFits() {
+    Text("One path", color = NeonCyan, fontSize = 28.sp)
+    Text(ProductGuide.PATH, color = NeonLime, fontSize = 16.sp)
+    Text(ProductGuide.SPEECH, color = Color(0xFFBFE8FF))
+    Text(ProductGuide.SAFE, color = NeonMagenta)
+    ProductGuide.surfaces().forEach { surface ->
+        Text(surface.name, color = NeonCyan, fontSize = 16.sp)
+        Text(surface.line, color = Color(0xFFBFE8FF))
+    }
+}
 
 @Composable
 private fun TerminalPinSettings() {
@@ -211,7 +225,7 @@ private fun CopilotSettings() {
         color = NeonLime
     )
     Text(
-        "Online evolve is a chat switch. It runs once when you send, never while the app sleeps, and it never updates this app.",
+        "Online evolve is a Chat switch. It runs once when you send, never while the app sleeps, and it never updates this app. Autopilot speech is Chat only — Terminal does not speak.",
         color = NeonCyan
     )
     Text(

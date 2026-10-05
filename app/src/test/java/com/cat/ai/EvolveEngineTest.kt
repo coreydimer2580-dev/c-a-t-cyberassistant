@@ -53,6 +53,14 @@ class EvolveEngineTest {
     }
 
     @Test
+    fun styleTokensOnlyReturnsWordsThatWereTyped() {
+        val hits = EvolveEngine.styleTokens("yeah heaps keen for arvo tea")
+        assertTrue(hits.contains("heaps"))
+        assertTrue(hits.contains("arvo"))
+        assertFalse(hits.contains("mate"))
+    }
+
+    @Test
     fun captureStyleIgnoresPlainSentences() {
         val style = EvolveEngine.captureStyle(listOf("the meeting is on tuesday"))
         assertTrue(style.isEmpty())

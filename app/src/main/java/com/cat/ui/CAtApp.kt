@@ -37,6 +37,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.cat.ProductGuide
 import com.cat.ui.theme.CATTheme
 import com.cat.ui.theme.CatWordmark
 import com.cat.ui.theme.NeonCyan
@@ -133,7 +134,7 @@ fun CAtApp() {
                         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                             CatWordmark(size = 40.sp)
                             Text(
-                                "v1.12 · Evolve path",
+                                ProductGuide.VERSION_LABEL,
                                 color = NeonLime,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Black,
@@ -199,8 +200,8 @@ private fun NeonSidebar(
             .padding(14.dp)
     ) {
         CatWordmark(size = 40.sp)
-        Text("v1.12 · Evolve path", color = NeonLime, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        Text("Terminal home · Chat · Wheel", color = NeonMagenta, fontSize = 11.sp, modifier = Modifier.padding(bottom = 16.dp))
+        Text(ProductGuide.VERSION_LABEL, color = NeonLime, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Text(ProductGuide.PATH, color = NeonMagenta, fontSize = 11.sp, modifier = Modifier.padding(bottom = 16.dp))
         tabs.forEachIndexed { index, title ->
             SideItem(
                 label = title,

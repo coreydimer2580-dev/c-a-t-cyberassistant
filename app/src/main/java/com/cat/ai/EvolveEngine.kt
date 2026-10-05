@@ -82,6 +82,14 @@ object EvolveEngine {
         )
     }
 
+    /** Informal words actually present in [text]. Does not invent slang. */
+    fun styleTokens(text: String): Set<String> {
+        val lower = text.lowercase()
+        return STYLE_WORDS.filter { word ->
+            Regex("\\b${Regex.escape(word)}\\b").containsMatchIn(lower)
+        }.toSet()
+    }
+
     /**
      * Phrases the user actually typed. Informal words plus one short quote.
      * Does not invent slang and does not read anything outside these lines.
