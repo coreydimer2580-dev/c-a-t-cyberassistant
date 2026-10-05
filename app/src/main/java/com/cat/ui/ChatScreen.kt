@@ -1,7 +1,14 @@
 package com.cat.ui
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,32 +20,45 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cat.CAtApplication
 import com.cat.ai.CopilotMode
 import com.cat.data.ChatMessage
+import com.cat.data.MemoryEntity
 import com.cat.tools.PhoneIntents
+import com.cat.ui.theme.Mist
 import com.cat.ui.theme.NeonCyan
 import com.cat.ui.theme.NeonLime
 import com.cat.ui.theme.NeonMagenta
+import com.cat.ui.theme.Panel
+import com.cat.ui.theme.Paper
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -52,10 +72,14 @@ fun ChatScreen(onBack: () -> Unit, wide: Boolean) {
     var notice by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var mode by remember { mutableStateOf(app.prefs.mode) }
+    var streamId by remember { mutableLongStateOf(-1L) }
+    val memories by app.database.memoryDao().observeAll().collectAsState(initial = emptyList())
 
-    fun apply(turn: com.cat.data.CopilotRepository.Turn) {
+    fun apply(turn: com.cat.data.CopilotRepository.Turn, animate: Boolean) {
         messages = turn.messages
         notice = turn.notice
+        val last = turn.messages.lastOrNull()
+        streamId = if (animate && last?.role == "assistant") last.id else -1L
         val phone = turn.phone
         val dial = phone?.dial
         val number = phone?.number
@@ -66,19 +90,33 @@ fun ChatScreen(onBack: () -> Unit, wide: Boolean) {
         }
     }
 
-    LaunchedEffect(Unit) {
-        messages = app.copilot.history()
-    }
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.lastIndex)
+    fun send() {
+        val text = draft
+        if (busy || text.isBlank()) return
+        draft = ""
+        busy = true
+        scope.launch {
+            val turn = runCatching { app.copilot.send(text) }.getOrElse {
+                com.cat.data.CopilotRepository.Turn(
+                    app.copilot.history(),
+                    it.message ?: "Send failed"
+                )
+            }
+            apply(turn, animate = true)
+            busy = false
         }
     }
 
+    LaunchedEffect(Unit) {
+        messages = app.copilot.history()
+    }
+    LaunchedEffect(messages.size, busy) {
+        val count = messages.size + if (busy) 1 else 0
+        if (count > 0) listState.animateScrollToItem(count - 1)
+    }
+
     Row(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(top = 8.dp),
+        modifier = Modifier.fillMaxSize(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Column(
@@ -89,45 +127,44 @@ fun ChatScreen(onBack: () -> Unit, wide: Boolean) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Button(onClick = onBack) { Text("Back") }
-                Text("C@T", color = NeonCyan, fontSize = 28.sp)
-                if (busy) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.padding(start = 8.dp).size(22.dp),
-                        color = NeonCyan,
-                        strokeWidth = 2.dp
-                    )
-                }
+                TextButton(onClick = onBack) { Text("Back", color = NeonMagenta, fontWeight = FontWeight.Bold) }
+                Text("C@T", color = NeonCyan, fontSize = 28.sp, fontWeight = FontWeight.Black)
+                Text(mode.label, color = NeonLime, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
             Text(
-                "Offline default · Australia/Perth · en-AU · does not wait on Wi-Fi",
-                color = Color(0xFFBFE8FF),
+                "Offline default · Australia/Perth · en-AU · memory stays on this phone",
+                color = Mist,
                 fontSize = 12.sp
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 CopilotMode.entries.forEach { item ->
-                    FilterChip(
-                        selected = mode == item,
-                        onClick = {
-                            mode = item
-                            app.prefs.mode = item
-                        },
-                        label = { Text(item.label) }
-                    )
+                    TextButton(onClick = {
+                        mode = item
+                        app.prefs.mode = item
+                    }) {
+                        Text(
+                            item.label,
+                            color = if (mode == item) Color.Black else NeonCyan,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(if (mode == item) NeonCyan else Color(0xFF102228))
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("/help", "/recall", "/tools", "/time").forEach { command ->
-                    OutlinedButton(onClick = { draft = command }) { Text(command) }
-                }
+            if (!wide) {
+                LiveMemoryRail(memories)
             }
             if (!notice.isNullOrBlank()) {
                 Text(
                     text = notice.orEmpty(),
-                    color = Color.White,
+                    color = Paper,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF3A1030), RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF3A1030))
                         .padding(10.dp)
                 )
             }
@@ -136,41 +173,24 @@ fun ChatScreen(onBack: () -> Unit, wide: Boolean) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(messages, key = { it.id }) { message ->
-                    Bubble(message)
+                    Bubble(message, stream = message.id == streamId && message.role == "assistant")
+                }
+                if (busy) {
+                    item { ThinkingBubble() }
                 }
             }
-            OutlinedTextField(
-                value = draft,
-                onValueChange = { draft = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Message C@T") },
-                enabled = !busy
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("/help", "/remember ", "/recall", "/tools").forEach { command ->
+                    TextButton(onClick = { draft = command }) {
+                        Text(command.trim(), color = NeonLime, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                }
+            }
+            Composer(draft = draft, enabled = !busy, onDraft = { draft = it }, onSend = { send() })
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = {
-                        val text = draft
-                        draft = ""
-                        busy = true
-                        scope.launch {
-                            val turn = runCatching { app.copilot.send(text) }.getOrElse {
-                                app.copilot.history().let { history ->
-                                    com.cat.data.CopilotRepository.Turn(
-                                        history,
-                                        it.message ?: "Send failed"
-                                    )
-                                }
-                            }
-                            apply(turn)
-                            busy = false
-                        }
-                    },
-                    enabled = !busy && draft.isNotBlank(),
-                    modifier = Modifier.weight(1f)
-                ) { Text("Send") }
                 OutlinedButton(
                     onClick = {
                         busy = true
@@ -178,42 +198,78 @@ fun ChatScreen(onBack: () -> Unit, wide: Boolean) {
                             val turn = runCatching { app.copilot.regenerate() }.getOrElse {
                                 com.cat.data.CopilotRepository.Turn(messages, it.message ?: "Regenerate failed")
                             }
-                            apply(turn)
+                            apply(turn, animate = true)
                             busy = false
                         }
                     },
                     enabled = !busy && messages.any { it.role == "user" }
-                ) { Text("Regen") }
+                ) { Text("Regen", color = NeonCyan) }
                 OutlinedButton(
                     onClick = {
                         busy = true
                         scope.launch {
-                            val turn = app.copilot.clear()
-                            apply(turn)
+                            apply(app.copilot.clear(), animate = false)
                             busy = false
                         }
                     },
                     enabled = !busy && messages.isNotEmpty()
-                ) { Text("Clear") }
+                ) { Text("Clear", color = NeonMagenta) }
             }
         }
         if (wide) {
             Column(
                 modifier = Modifier
                     .widthIn(max = 280.dp)
-                    .weight(0.7f)
-                    .padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .weight(0.72f),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("Copilot", color = NeonCyan, fontSize = 22.sp)
-                Text("Mode: ${mode.label}", color = NeonLime)
+                Text("Copilot", color = NeonCyan, fontSize = 22.sp, fontWeight = FontWeight.Black)
                 Text(
-                    "Offline answers on this phone and does not wait for Wi-Fi. Cloud and Auto use the network only when it is available, then fall back offline. /call and /sms open your own dialer or SMS app.",
-                    color = Color(0xFFBFE8FF)
+                    "Offline answers on this phone and do not wait for Wi-Fi. /call and /sms open your own dialer or SMS app.",
+                    color = Mist
                 )
+                LiveMemoryRail(memories)
+            }
+        }
+    }
+}
+
+@Composable
+private fun LiveMemoryRail(memories: List<MemoryEntity>) {
+    var flashId by remember { mutableLongStateOf(-1L) }
+    val newest = memories.firstOrNull()?.id
+    LaunchedEffect(newest) {
+        val id = newest ?: return@LaunchedEffect
+        flashId = id
+        delay(1600)
+        if (flashId == id) flashId = -1L
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Panel)
+            .border(1.dp, NeonMagenta.copy(alpha = 0.7f), RoundedCornerShape(16.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text("Live memory", color = NeonMagenta, fontWeight = FontWeight.Black, fontSize = 14.sp)
+        Text("Saved on this phone. No expiry.", color = Mist, fontSize = 11.sp)
+        if (memories.isEmpty()) {
+            Text("Nothing yet. Try /remember tea is at 4", color = Paper, fontSize = 13.sp)
+        } else {
+            memories.take(8).forEach { note ->
+                val hot = note.id == flashId
                 Text(
-                    "Secrets in what you type are redacted before they are saved or sent.",
-                    color = NeonMagenta
+                    text = note.content,
+                    color = if (hot) Color.Black else Paper,
+                    fontWeight = if (hot) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = 13.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (hot) NeonLime else Color(0xFF12141C))
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
                 )
             }
         }
@@ -221,18 +277,88 @@ fun ChatScreen(onBack: () -> Unit, wide: Boolean) {
 }
 
 @Composable
-private fun Bubble(message: ChatMessage) {
+private fun Composer(draft: String, enabled: Boolean, onDraft: (String) -> Unit, onSend: () -> Unit) {
+    val shape = RoundedCornerShape(28.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(Color(0xFF050508))
+            .border(
+                width = 1.5.dp,
+                brush = Brush.horizontalGradient(listOf(NeonCyan, NeonMagenta, NeonLime)),
+                shape = shape
+            )
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        BasicTextField(
+            value = draft,
+            onValueChange = onDraft,
+            enabled = enabled,
+            textStyle = TextStyle(color = Paper, fontSize = 16.sp, fontWeight = FontWeight.Medium),
+            cursorBrush = SolidColor(NeonCyan),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+            keyboardActions = KeyboardActions(onSend = { onSend() }),
+            maxLines = 4,
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            decorationBox = { inner ->
+                Box {
+                    if (draft.isEmpty()) {
+                        Text("Ask C@T", color = Color(0xFF6A8A96))
+                    }
+                    inner()
+                }
+            }
+        )
+        TextButton(onClick = onSend, enabled = enabled && draft.isNotBlank()) {
+            Text(
+                "Send",
+                color = Color.Black,
+                fontWeight = FontWeight.Black,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(if (enabled && draft.isNotBlank()) NeonCyan else Color(0xFF1C3036))
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun Bubble(message: ChatMessage, stream: Boolean) {
     val fromUser = message.role == "user"
+    val full = message.content
+    var shown by remember(message.id) { mutableStateOf(if (stream) "" else full) }
+    LaunchedEffect(message.id, stream, full) {
+        if (!stream) {
+            shown = full
+            return@LaunchedEffect
+        }
+        val step = (full.length / 36).coerceIn(1, 8)
+        var i = 0
+        while (i < full.length) {
+            i = (i + step).coerceAtMost(full.length)
+            shown = full.take(i)
+            delay(16)
+        }
+    }
+    val live = stream && shown.length < full.length
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (fromUser) Arrangement.End else Arrangement.Start
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth(0.86f)
-                .background(
-                    if (fromUser) Color(0xFF10242A) else Color(0xFF10160F),
-                    RoundedCornerShape(16.dp)
+                .fillMaxWidth(0.88f)
+                .clip(RoundedCornerShape(18.dp))
+                .background(if (fromUser) Color(0xFF071C22) else Color(0xFF10160C))
+                .border(
+                    1.dp,
+                    if (fromUser) NeonCyan.copy(alpha = 0.85f) else NeonLime.copy(alpha = 0.75f),
+                    RoundedCornerShape(18.dp)
                 )
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -240,12 +366,37 @@ private fun Bubble(message: ChatMessage) {
             Text(
                 text = if (fromUser) "You" else "C@T",
                 color = if (fromUser) NeonCyan else NeonLime,
-                fontSize = 12.sp
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Black
             )
-            Text(message.content, color = Color(0xFFEAFBFF))
+            Text(
+                text = if (live) "$shown▍" else shown,
+                color = Paper,
+                fontWeight = FontWeight.Medium
+            )
             if (message.filtered) {
-                Text("redacted before save", color = NeonMagenta, fontSize = 11.sp)
+                Text("redacted before save", color = NeonMagenta, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
+}
+
+@Composable
+private fun ThinkingBubble() {
+    val transition = rememberInfiniteTransition(label = "think")
+    val alpha by transition.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse),
+        label = "think-alpha"
+    )
+    Text(
+        text = "C@T  ● ● ●",
+        color = NeonCyan.copy(alpha = alpha),
+        fontWeight = FontWeight.Black,
+        modifier = Modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color(0xFF10160C))
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+    )
 }

@@ -90,4 +90,18 @@ class CopilotEngineTest {
         assertEquals("buy milk", todo.todoToAdd)
         assertTrue(engine.respond("/help", emptyList(), emptyList()).reply.contains("/sms"))
     }
+
+    @Test
+    fun shortNoteImprovesOfflineAnswer() {
+        val result = engine.respond("when is tea", emptyList(), listOf("tea is at 4"))
+        assertTrue(result.reply.contains("tea is at 4"))
+        assertTrue(result.reply.contains("saved memory"))
+    }
+
+    @Test
+    fun recallSaysNotesDoNotExpire() {
+        val result = engine.respond("/recall", emptyList(), listOf("tea is at 4"))
+        assertTrue(result.reply.contains("no expiry"))
+        assertTrue(result.reply.contains("tea is at 4"))
+    }
 }

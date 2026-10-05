@@ -2,6 +2,7 @@ package com.cat.ui
 
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,7 +20,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -27,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cat.CAtApplication
@@ -37,6 +41,7 @@ import com.cat.ui.theme.NeonLime
 import com.cat.ui.theme.NeonMagenta
 import java.text.DateFormat
 import java.util.Date
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -44,17 +49,16 @@ fun MemoryScreen(stacks: List<MemoryStack>, wide: Boolean) {
     val context = LocalContext.current
     val dao = (context.applicationContext as CAtApplication).database.memoryDao()
     val scope = rememberCoroutineScope()
-    var notes by remember { mutableStateOf<List<MemoryEntity>>(emptyList()) }
+    val notes by dao.observeAll().collectAsState(initial = emptyList())
     var draft by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("") }
-
-    suspend fun reload() {
-        notes = dao.getAll()
-    }
-
-    LaunchedEffect(Unit) {
-        runCatching { reload() }
-            .onFailure { status = it.message ?: "Could not read notes" }
+    var flashId by remember { mutableLongStateOf(-1L) }
+    val newest = notes.firstOrNull()?.id
+    LaunchedEffect(newest) {
+        val id = newest ?: return@LaunchedEffect
+        flashId = id
+        delay(1600)
+        if (flashId == id) flashId = -1L
     }
 
     if (wide) {
@@ -67,6 +71,7 @@ fun MemoryScreen(stacks: List<MemoryStack>, wide: Boolean) {
             NotesPane(
                 modifier = Modifier.weight(1.3f),
                 notes = notes,
+                flashId = flashId,
                 draft = draft,
                 status = status,
                 onDraft = { draft = it },
@@ -82,8 +87,7 @@ fun MemoryScreen(stacks: List<MemoryStack>, wide: Boolean) {
                                 )
                             )
                             draft = ""
-                            reload()
-                            status = "Saved"
+                            status = "Saved on this phone. No expiry."
                         }.onFailure {
                             status = it.message ?: "Save failed"
                             Toast.makeText(context, status, Toast.LENGTH_SHORT).show()
@@ -94,7 +98,6 @@ fun MemoryScreen(stacks: List<MemoryStack>, wide: Boolean) {
                     scope.launch {
                         runCatching {
                             dao.clearAll()
-                            reload()
                             status = "Cleared"
                         }.onFailure { status = it.message ?: "Clear failed" }
                     }
@@ -111,6 +114,7 @@ fun MemoryScreen(stacks: List<MemoryStack>, wide: Boolean) {
             NotesPane(
                 modifier = Modifier.weight(1.4f),
                 notes = notes,
+                flashId = flashId,
                 draft = draft,
                 status = status,
                 onDraft = { draft = it },
@@ -126,8 +130,7 @@ fun MemoryScreen(stacks: List<MemoryStack>, wide: Boolean) {
                                 )
                             )
                             draft = ""
-                            reload()
-                            status = "Saved"
+                            status = "Saved on this phone. No expiry."
                         }.onFailure {
                             status = it.message ?: "Save failed"
                             Toast.makeText(context, status, Toast.LENGTH_SHORT).show()
@@ -138,7 +141,6 @@ fun MemoryScreen(stacks: List<MemoryStack>, wide: Boolean) {
                     scope.launch {
                         runCatching {
                             dao.clearAll()
-                            reload()
                             status = "Cleared"
                         }.onFailure { status = it.message ?: "Clear failed" }
                     }
@@ -153,6 +155,7 @@ fun MemoryScreen(stacks: List<MemoryStack>, wide: Boolean) {
 private fun NotesPane(
     modifier: Modifier,
     notes: List<MemoryEntity>,
+    flashId: Long,
     draft: String,
     status: String,
     onDraft: (String) -> Unit,
@@ -163,9 +166,9 @@ private fun NotesPane(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Local notes", color = NeonCyan, fontSize = 28.sp)
+        Text("Local notes", color = NeonCyan, fontSize = 28.sp, fontWeight = FontWeight.Black)
         Text(
-            "Saved only in this app's Room database on the device. C@T does not read your files.",
+            "Live from Room on this phone. Kept until you clear them. No expiry. C@T does not read your files.",
             color = Color(0xFFBFE8FF)
         )
         OutlinedTextField(
@@ -188,13 +191,15 @@ private fun NotesPane(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(notes, key = { it.id }) { note ->
+                val hot = note.id == flashId
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF111821), RoundedCornerShape(16.dp))
+                        .background(if (hot) Color(0xFF14210A) else Color(0xFF111821), RoundedCornerShape(16.dp))
+                        .border(1.dp, if (hot) NeonLime else NeonCyan.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
                         .padding(16.dp)
                 ) {
-                    Text(note.content, color = Color(0xFFEAFBFF))
+                    Text(note.content, color = if (hot) NeonLime else Color(0xFFEAFBFF), fontWeight = FontWeight.Bold)
                     Text(note.category, color = NeonMagenta)
                     Text(
                         DateFormat.getDateTimeInstance().format(Date(note.createdAt)),

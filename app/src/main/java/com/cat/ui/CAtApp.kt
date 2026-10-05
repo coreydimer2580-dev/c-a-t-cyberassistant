@@ -2,13 +2,21 @@ package com.cat.ui
 
 import android.app.Activity
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
@@ -20,9 +28,12 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -33,6 +44,9 @@ import com.cat.model.VoiceProfile
 import com.cat.model.WorldState
 import com.cat.ui.theme.CATTheme
 import com.cat.ui.theme.NeonCyan
+import com.cat.ui.theme.NeonLime
+import com.cat.ui.theme.NeonMagenta
+import com.cat.ui.theme.Panel
 
 private object Routes {
     const val DASHBOARD = "dashboard"
@@ -123,77 +137,212 @@ fun CAtApp() {
         }
     }
 
+    fun openChat() {
+        navController.navigate(Routes.CHAT) { launchSingleTop = true }
+    }
+
     CATTheme {
         Surface(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black)
+                .background(Color.Black),
+            color = Color.Black
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(12.dp)
-            ) {
-                if (!onChat) {
-                    ScrollableTabRow(
-                        selectedTabIndex = selectedTab,
-                        containerColor = Color(0xFF0C0F16),
-                        contentColor = NeonCyan,
-                        edgePadding = 0.dp
+            if (wide) {
+                Row(modifier = Modifier.fillMaxSize()) {
+                    NeonSidebar(
+                        tabs = tabs,
+                        selectedTab = selectedTab,
+                        onChat = onChat,
+                        onSelect = { openTab(it) },
+                        onChatClick = { openChat() }
+                    )
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(16.dp)
                     ) {
-                        tabs.forEachIndexed { index, title ->
-                            Tab(
-                                selected = selectedTab == index,
-                                onClick = { openTab(index) },
-                                text = { Text(title) }
-                            )
-                        }
-                    }
-                }
-
-                NavHost(
-                    navController = navController,
-                    startDestination = Routes.DASHBOARD,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                ) {
-                    composable(Routes.DASHBOARD) {
-                        DashboardScreen(
+                        AppNav(
+                            navController = navController,
                             features = features,
+                            stacks = stacks,
+                            voices = voices,
                             worlds = worlds,
-                            wide = wide,
-                            refreshKey = dashEpoch,
-                            onLaunch = { navController.navigate(Routes.CHAT) },
-                            onOpenMemory = { openTab(1) },
-                            onOpenTools = { openTab(2) }
-                        )
-                    }
-                    composable(Routes.MEMORY) { MemoryScreen(stacks, wide) }
-                    composable(Routes.TOOLS) { ToolsScreen(wide) }
-                    composable(Routes.VOICE) { VoiceScreen(voices) }
-                    composable(Routes.WORLD) { WorldScreen(worlds) }
-                    composable(Routes.SETTINGS) {
-                        SettingsScreen(
-                            features = features,
-                            wide = wide,
+                            wide = true,
+                            dashEpoch = dashEpoch,
+                            onOpenTab = { openTab(it) },
+                            onLaunch = { openChat() },
                             onToggle = { index ->
                                 val current = features[index]
                                 features[index] = current.copy(enabled = !current.enabled)
-                            }
-                        )
-                    }
-                    composable(Routes.CHAT) {
-                        ChatScreen(
-                            wide = wide,
-                            onBack = {
+                            },
+                            onChatBack = {
                                 dashEpoch += 1
                                 navController.popBackStack()
                             }
                         )
                     }
                 }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(12.dp)
+                ) {
+                    if (!onChat) {
+                        ScrollableTabRow(
+                            selectedTabIndex = selectedTab,
+                            containerColor = Panel,
+                            contentColor = NeonCyan,
+                            edgePadding = 0.dp,
+                            indicator = { positions ->
+                                if (selectedTab < positions.size) {
+                                    TabRowDefaults.SecondaryIndicator(
+                                        Modifier.tabIndicatorOffset(positions[selectedTab]),
+                                        color = NeonCyan
+                                    )
+                                }
+                            }
+                        ) {
+                            tabs.forEachIndexed { index, title ->
+                                Tab(
+                                    selected = selectedTab == index,
+                                    onClick = { openTab(index) },
+                                    selectedContentColor = NeonCyan,
+                                    unselectedContentColor = Color(0xFF6A8A96),
+                                    text = {
+                                        Text(
+                                            title,
+                                            fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Medium
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    AppNav(
+                        navController = navController,
+                        features = features,
+                        stacks = stacks,
+                        voices = voices,
+                        worlds = worlds,
+                        wide = false,
+                        dashEpoch = dashEpoch,
+                        onOpenTab = { openTab(it) },
+                        onLaunch = { openChat() },
+                        onToggle = { index ->
+                            val current = features[index]
+                            features[index] = current.copy(enabled = !current.enabled)
+                        },
+                        onChatBack = {
+                            dashEpoch += 1
+                            navController.popBackStack()
+                        }
+                    )
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun NeonSidebar(
+    tabs: List<String>,
+    selectedTab: Int,
+    onChat: Boolean,
+    onSelect: (Int) -> Unit,
+    onChatClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .width(188.dp)
+            .fillMaxHeight()
+            .background(Panel)
+            .padding(14.dp)
+    ) {
+        Text("C@T", color = NeonCyan, fontSize = 32.sp, fontWeight = FontWeight.Black)
+        Text("v1.4 · AU offline", color = NeonLime, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Text("No network scan", color = NeonMagenta, fontSize = 11.sp, modifier = Modifier.padding(bottom = 16.dp))
+        tabs.forEachIndexed { index, title ->
+            SideItem(
+                label = title,
+                selected = !onChat && selectedTab == index,
+                accent = NeonCyan,
+                onClick = { onSelect(index) }
+            )
+        }
+        SideItem(
+            label = "Chat",
+            selected = onChat,
+            accent = NeonMagenta,
+            onClick = onChatClick
+        )
+    }
+}
+
+@Composable
+private fun SideItem(label: String, selected: Boolean, accent: Color, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(12.dp)
+    Text(
+        text = label,
+        color = if (selected) Color.Black else accent,
+        fontWeight = FontWeight.Bold,
+        fontSize = 15.sp,
+        modifier = Modifier
+            .padding(vertical = 3.dp)
+            .fillMaxWidth()
+            .clip(shape)
+            .background(if (selected) accent else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+    )
+}
+
+@Composable
+private fun ColumnScope.AppNav(
+    navController: androidx.navigation.NavHostController,
+    features: List<FeatureToggle>,
+    stacks: List<MemoryStack>,
+    voices: List<VoiceProfile>,
+    worlds: List<WorldState>,
+    wide: Boolean,
+    dashEpoch: Int,
+    onOpenTab: (Int) -> Unit,
+    onLaunch: () -> Unit,
+    onToggle: (Int) -> Unit,
+    onChatBack: () -> Unit
+) {
+    NavHost(
+        navController = navController,
+        startDestination = Routes.DASHBOARD,
+        modifier = Modifier
+            .fillMaxWidth()
+            .weight(1f)
+    ) {
+        composable(Routes.DASHBOARD) {
+            DashboardScreen(
+                features = features,
+                worlds = worlds,
+                wide = wide,
+                refreshKey = dashEpoch,
+                onLaunch = onLaunch,
+                onOpenMemory = { onOpenTab(1) },
+                onOpenTools = { onOpenTab(2) }
+            )
+        }
+        composable(Routes.MEMORY) { MemoryScreen(stacks, wide) }
+        composable(Routes.TOOLS) { ToolsScreen(wide) }
+        composable(Routes.VOICE) { VoiceScreen(voices) }
+        composable(Routes.WORLD) { WorldScreen(worlds) }
+        composable(Routes.SETTINGS) {
+            SettingsScreen(
+                features = features,
+                wide = wide,
+                onToggle = onToggle
+            )
+        }
+        composable(Routes.CHAT) {
+            ChatScreen(wide = wide, onBack = onChatBack)
         }
     }
 }

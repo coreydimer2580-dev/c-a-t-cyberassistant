@@ -224,10 +224,13 @@ class CopilotEngine(
 
     private fun recallReply(memories: List<String>): String {
         if (memories.isEmpty()) {
-            return "Local memory is empty. Say /remember <fact> and I'll keep it in this app only."
+            return "Local memory is empty. Say /remember <fact>. It stays on this phone in Room with no expiry."
         }
-        val lines = memories.take(8).joinToString("\n") { "- $it" }
-        return "C@T local memory:\n$lines"
+        val shown = memories.take(40)
+        val lines = shown.joinToString("\n") { "- $it" }
+        val extra = memories.size - shown.size
+        val more = if (extra > 0) "\n… and $extra more on the Memory tab." else ""
+        return "C@T local memory (${memories.size}, kept on this phone, no expiry):\n$lines$more"
     }
 
     private fun summarizeReply(recentChat: List<Pair<String, String>>, current: String): String {
@@ -248,12 +251,15 @@ class CopilotEngine(
     ): String {
         val keywords = clean.lowercase()
             .split(Regex("[^a-z0-9]+"))
-            .filter { it.length >= 4 && it !in STOP }
+            .filter { it.length >= 3 && it !in STOP }
             .distinct()
-        val noteHits = memories.filter { note ->
+        val noteHits = memories.map { note ->
             val hay = note.lowercase()
-            keywords.any { hay.contains(it) }
-        }.take(3)
+            note to keywords.count { hay.contains(it) }
+        }.filter { it.second > 0 }
+            .sortedByDescending { it.second }
+            .map { it.first }
+            .take(3)
         val chatHits = recentChat.filter { (_, content) ->
             val hay = content.lowercase()
             keywords.any { hay.contains(it) }
@@ -266,7 +272,7 @@ class CopilotEngine(
         }
         val parts = mutableListOf("C@T offline (Australia/Perth).")
         if (noteHits.isNotEmpty()) {
-            parts.add("Matched notes:\n" + noteHits.joinToString("\n") { "- $it" })
+            parts.add("Using saved memory:\n" + noteHits.joinToString("\n") { "- $it" })
         }
         if (chatHits.isNotEmpty()) {
             parts.add(
@@ -285,7 +291,9 @@ class CopilotEngine(
         private val STOP = setOf(
             "where", "what", "when", "which", "your", "this", "that", "have", "with",
             "from", "about", "does", "like", "tell", "please", "want", "need", "into",
-            "there", "here", "would", "could", "should", "just", "them", "they", "then"
+            "there", "here", "would", "could", "should", "just", "them", "they", "then",
+            "the", "and", "for", "you", "are", "was", "not", "but", "can", "how", "why",
+            "who", "its", "it's"
         )
         private val HELP_REPLY = """
             C@T offline mode. Australia/Perth, en-AU. Wi-Fi is not required.
@@ -307,6 +315,8 @@ class CopilotEngine(
             - /call 0412345678 opens your dialer
             - /sms 0412345678 your draft opens your SMS app
             You can also type remember, recall, summarize, or help without a slash.
+            Saved memory stays in Room on this phone with no expiry and shows live on screen.
+            Offline answers use those notes when your words match them.
             C@T does not send texts or place calls. Your phone's own apps do that if you confirm.
             There is no separate message network and no paid API. Cloud is optional and falls back offline.
         """.trimIndent()
@@ -324,6 +334,7 @@ class CopilotEngine(
         """.trimIndent()
         private val TOOLS_REPLY = """
             Tools tab, all on this phone, no network:
+            - Route log (typed lines only, Australia/Perth timestamps)
             - Notes
             - Clipboard scrubber
             - Passphrase strength

@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import com.cat.CAtApplication
 import com.cat.ai.SensitiveFilter
 import com.cat.data.MemoryEntity
+import com.cat.data.RouteLogEntity
 import com.cat.tools.AuPhone
 import com.cat.tools.LocalTools
 import com.cat.tools.PhoneIntents
@@ -59,6 +60,7 @@ fun ToolsScreen(wide: Boolean) {
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Intro()
+                RouteLogCard()
                 PhoneCard()
                 NotesCard()
                 ChecklistCard()
@@ -89,6 +91,7 @@ fun ToolsScreen(wide: Boolean) {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Intro()
+            RouteLogCard()
             PhoneCard()
             NotesCard()
             ChecklistCard()
@@ -155,6 +158,98 @@ private fun PhoneCard() {
             Text("Use a normal number. Star and hash codes are blocked.", color = NeonMagenta)
         }
         if (status.isNotEmpty()) Text(status, color = NeonLime)
+    }
+}
+
+
+@Composable
+private fun RouteLogCard() {
+    val app = LocalContext.current.applicationContext as CAtApplication
+    val scope = rememberCoroutineScope()
+    var lines by remember { mutableStateOf<List<RouteLogEntity>>(emptyList()) }
+    var label by remember { mutableStateOf("") }
+    var fromPlace by remember { mutableStateOf("") }
+    var toPlace by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) { lines = app.database.routeLogDao().newestFirst() }
+    CardColumn {
+        Text("Route log", color = NeonCyan, fontSize = 22.sp)
+        Text(
+            "Typed lines only, stored on this phone. Time is Australia/Perth when you add a line. No Wi-Fi scan, Bluetooth, radio, or background discovery.",
+            color = Color(0xFFBFE8FF)
+        )
+        OutlinedTextField(
+            value = label,
+            onValueChange = { label = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Label") }
+        )
+        OutlinedTextField(
+            value = fromPlace,
+            onValueChange = { fromPlace = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("From") }
+        )
+        OutlinedTextField(
+            value = toPlace,
+            onValueChange = { toPlace = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("To") }
+        )
+        OutlinedTextField(
+            value = note,
+            onValueChange = { note = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Note") }
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = {
+                val nextLabel = label.trim()
+                val nextFrom = fromPlace.trim()
+                val nextTo = toPlace.trim()
+                val nextNote = note.trim()
+                if (nextLabel.isEmpty() && nextFrom.isEmpty() && nextTo.isEmpty() && nextNote.isEmpty()) {
+                    return@Button
+                }
+                label = ""
+                fromPlace = ""
+                toPlace = ""
+                note = ""
+                scope.launch {
+                    app.database.routeLogDao().insert(
+                        RouteLogEntity(
+                            label = nextLabel,
+                            fromPlace = nextFrom,
+                            toPlace = nextTo,
+                            note = nextNote,
+                            createdAt = System.currentTimeMillis()
+                        )
+                    )
+                    lines = app.database.routeLogDao().newestFirst()
+                }
+            }) { Text("Add line") }
+            if (lines.isNotEmpty()) {
+                OutlinedButton(onClick = {
+                    scope.launch {
+                        app.database.routeLogDao().clearAll()
+                        lines = emptyList()
+                    }
+                }) { Text("Clear all") }
+            }
+        }
+        lines.forEach { line ->
+            val stamp = LocalTools.formatZone(line.createdAt, LocalTools.PERTH_ZONE)
+            val title = line.label.ifBlank { "Untitled" }
+            Text("$title · $stamp", color = NeonCyan)
+            Text("${line.fromPlace.ifBlank { "—" }} → ${line.toPlace.ifBlank { "—" }}", color = Color(0xFFEAFBFF))
+            if (line.note.isNotBlank()) Text(line.note, color = Color(0xFFBFE8FF))
+            OutlinedButton(onClick = {
+                scope.launch {
+                    app.database.routeLogDao().deleteById(line.id)
+                    lines = app.database.routeLogDao().newestFirst()
+                }
+            }) { Text("Delete") }
+        }
     }
 }
 

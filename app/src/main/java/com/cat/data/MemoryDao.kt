@@ -3,18 +3,26 @@ package com.cat.data
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface MemoryDao {
     @Insert
     suspend fun insert(memory: MemoryEntity)
 
-    @Query("SELECT * FROM memory ORDER BY createdAt DESC")
+    /** Newest first. Rows stay until the user deletes them. There is no expiry. */
+    @Query("SELECT * FROM memory ORDER BY createdAt DESC, id DESC")
     suspend fun getAll(): List<MemoryEntity>
+
+    @Query("SELECT * FROM memory ORDER BY createdAt DESC, id DESC")
+    fun observeAll(): Flow<List<MemoryEntity>>
 
     @Query("DELETE FROM memory")
     suspend fun clearAll()
 
     @Query("SELECT COUNT(*) FROM memory")
     suspend fun count(): Int
+
+    @Query("SELECT COUNT(*) FROM memory")
+    fun observeCount(): Flow<Int>
 }
