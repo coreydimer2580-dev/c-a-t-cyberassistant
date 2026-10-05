@@ -17,7 +17,9 @@ class CopilotEngine(
         val reply: String,
         val memoryToSave: String? = null,
         val skipCloud: Boolean = true,
-        val todoToAdd: String? = null
+        val todoToAdd: String? = null,
+        /** Short user fact for the evolving feed. Never a truth score. */
+        val learnToSave: String? = null
     )
 
     fun prepare(raw: String): Prepared {
@@ -29,26 +31,46 @@ class CopilotEngine(
         userText: String,
         recentChat: List<Pair<String, String>>,
         memories: List<String>,
-        todos: List<String> = emptyList()
+        todos: List<String> = emptyList(),
+        memoryTags: List<String> = emptyList()
     ): OfflineResult {
         val clean = filter.sanitize(userText).trim()
+        val result = dispatch(clean, recentChat, memories, todos, memoryTags)
+        val learned = result.learnToSave ?: learnCandidate(clean)
+        if (learned.isNullOrBlank()) return result
+        val queued = result.copy(learnToSave = learned.take(160))
+        if (result.memoryToSave != null || result.reply.contains("evolving memory")) return queued
+        return queued.copy(
+            reply = result.reply +
+                "\nC@T evolving memory saved a short note (Unsure until you tag it True, False, or Unsure)."
+        )
+    }
+
+    private fun dispatch(
+        clean: String,
+        recentChat: List<Pair<String, String>>,
+        memories: List<String>,
+        todos: List<String>,
+        memoryTags: List<String>
+    ): OfflineResult {
         if (clean.isEmpty()) {
             return OfflineResult("C@T here. Send a message and I'll work with it locally. Wi-Fi is not required.")
         }
         if (clean.startsWith("/")) {
-            return slash(clean.drop(1).trim(), recentChat, memories, todos)
+            return slash(clean.drop(1).trim(), recentChat, memories, todos, memoryTags)
         }
         val lower = clean.lowercase()
 
         rememberFact(clean)?.let { fact ->
             return OfflineResult(
-                reply = "Locked into local memory: $fact",
-                memoryToSave = fact
+                reply = "Locked into C@T hard save: $fact. On the evolving memory feed as Unsure until you tag it.",
+                memoryToSave = fact,
+                learnToSave = fact
             )
         }
 
         if (isRecall(lower)) {
-            return OfflineResult(recallReply(memories))
+            return OfflineResult(recallReply(memories, memoryTags))
         }
         if (lower == "tools" || lower == "tool") {
             return OfflineResult(TOOLS_REPLY)
@@ -75,7 +97,7 @@ class CopilotEngine(
             )
         }
         return OfflineResult(
-            reply = contextualReply(clean, recentChat, memories),
+            reply = contextualReply(clean, recentChat, memories, memoryTags),
             skipCloud = false
         )
     }
@@ -84,7 +106,8 @@ class CopilotEngine(
         body: String,
         recentChat: List<Pair<String, String>>,
         memories: List<String>,
-        todos: List<String>
+        todos: List<String>,
+        memoryTags: List<String>
     ): OfflineResult {
         if (body.isEmpty()) return OfflineResult(HELP_REPLY)
         val cmd = body.substringBefore(' ').lowercase()
@@ -98,10 +121,14 @@ class CopilotEngine(
                 if (fact.isEmpty()) {
                     OfflineResult("Say /remember tea is at 4")
                 } else {
-                    OfflineResult("Locked into local memory: $fact", memoryToSave = fact)
+                    OfflineResult(
+                        "Locked into C@T hard save: $fact. On the evolving memory feed as Unsure until you tag it.",
+                        memoryToSave = fact,
+                        learnToSave = fact
+                    )
                 }
             }
-            "recall", "notes", "memories" -> OfflineResult(recallReply(memories))
+            "recall", "notes", "memories" -> OfflineResult(recallReply(memories, memoryTags))
             "tools", "tool" -> OfflineResult(TOOLS_REPLY)
             "summarize", "summary" -> OfflineResult(summarizeReply(recentChat, body))
             "settings", "setting" -> OfflineResult(SETTINGS_REPLY)
@@ -185,6 +212,34 @@ class CopilotEngine(
         return fact.ifEmpty { null }
     }
 
+    /**
+     * Pulls a short user fact for the evolving feed.
+     * Remember, or a confidence phrase the user typed.
+     * Does not score the fact as true or false.
+     */
+    private fun learnCandidate(clean: String): String? {
+        if (clean.isEmpty()) return null
+        rememberFact(clean)?.let { return it.take(160).ifBlank { null } }
+        if (clean.startsWith("/")) {
+            val body = clean.drop(1).trim()
+            if (!body.lowercase().startsWith("remember")) return null
+            val arg = if (' ' in body) body.substringAfter(' ').trim() else ""
+            val fact = filter.sanitize(arg.replace(Regex("(?i)^that\\s+"), ""))
+                .trim()
+                .trimEnd('.')
+            return fact.take(160).ifBlank { null }
+        }
+        val lower = clean.lowercase()
+        if (isHelp(lower) || isSettings(lower) || isFold(lower) || isSummarize(lower) || isRecall(lower)) {
+            return null
+        }
+        if (lower == "tools" || lower == "tool" || lower == "time" || lower == "clock") return null
+        if (CONFIDENCE.none { phrase -> PHRASE(phrase).containsMatchIn(lower) }) return null
+        val short = clean.replace(Regex("\\s+"), " ").trim().trimEnd('.').take(160)
+        if (short.length < 12) return null
+        return short
+    }
+
     private fun isRecall(lower: String): Boolean {
         return lower == "recall" ||
             lower.startsWith("recall ") ||
@@ -222,15 +277,18 @@ class CopilotEngine(
         return GREETING.containsMatchIn(lower)
     }
 
-    private fun recallReply(memories: List<String>): String {
+    private fun recallReply(memories: List<String>, tags: List<String>): String {
         if (memories.isEmpty()) {
-            return "Local memory is empty. Say /remember <fact>. It stays on this phone in Room with no expiry."
+            return "Local memory is empty. Say /remember <fact>. It stays on this phone in C@T hard save with no expiry."
         }
         val shown = memories.take(40)
-        val lines = shown.joinToString("\n") { "- $it" }
+        val lines = shown.mapIndexed { index, note ->
+            val tag = tags.getOrNull(index)?.takeIf { it.isNotBlank() }
+            if (tag == null) "- $note" else "- [${com.cat.data.TruthTag.normalize(tag)}] $note"
+        }.joinToString("\n")
         val extra = memories.size - shown.size
         val more = if (extra > 0) "\n… and $extra more on the Memory tab." else ""
-        return "C@T local memory (${memories.size}, kept on this phone, no expiry):\n$lines$more"
+        return "C@T hard save (${memories.size}, kept on this phone, no expiry):\n$lines$more"
     }
 
     private fun summarizeReply(recentChat: List<Pair<String, String>>, current: String): String {
@@ -247,18 +305,18 @@ class CopilotEngine(
     private fun contextualReply(
         clean: String,
         recentChat: List<Pair<String, String>>,
-        memories: List<String>
+        memories: List<String>,
+        tags: List<String>
     ): String {
         val keywords = clean.lowercase()
             .split(Regex("[^a-z0-9]+"))
             .filter { it.length >= 3 && it !in STOP }
             .distinct()
-        val noteHits = memories.map { note ->
+        val noteHits = memories.mapIndexed { index, note ->
             val hay = note.lowercase()
-            note to keywords.count { hay.contains(it) }
-        }.filter { it.second > 0 }
-            .sortedByDescending { it.second }
-            .map { it.first }
+            Triple(note, tags.getOrNull(index).orEmpty(), keywords.count { hay.contains(it) })
+        }.filter { it.third > 0 }
+            .sortedByDescending { it.third }
             .take(3)
         val chatHits = recentChat.filter { (_, content) ->
             val hay = content.lowercase()
@@ -272,7 +330,11 @@ class CopilotEngine(
         }
         val parts = mutableListOf("C@T offline (Australia/Perth).")
         if (noteHits.isNotEmpty()) {
-            parts.add("Using saved memory:\n" + noteHits.joinToString("\n") { "- $it" })
+            parts.add(
+                "Using saved memory:\n" + noteHits.joinToString("\n") { (note, tag, _) ->
+                    if (tag.isBlank()) "- $note" else "- [${com.cat.data.TruthTag.normalize(tag)}] $note"
+                }
+            )
         }
         if (chatHits.isNotEmpty()) {
             parts.add(
@@ -287,6 +349,13 @@ class CopilotEngine(
 
     companion object {
         private val REMEMBER = Regex("(?i)^(?:please\\s+)?remember(?:\\s+that)?\\s+(.+)$")
+        private val CONFIDENCE = listOf(
+            "i know", "i knew", "i'm sure", "im sure", "i am sure",
+            "definitely", "for sure", "i'm certain", "im certain", "i am certain",
+            "always", "never", "i think", "i believe", "probably", "maybe",
+            "certainly", "no doubt"
+        )
+        private fun PHRASE(phrase: String) = Regex("(?i)(?<![a-z])" + Regex.escape(phrase) + "(?![a-z])")
         private val GREETING = Regex("(?i)^(hi|hey|hello|yo|good morning|good evening|good night|g'day)\\b")
         private val STOP = setOf(
             "where", "what", "when", "which", "your", "this", "that", "have", "with",
@@ -315,8 +384,10 @@ class CopilotEngine(
             - /call 0412345678 opens your dialer
             - /sms 0412345678 your draft opens your SMS app
             You can also type remember, recall, summarize, or help without a slash.
-            Saved memory stays in Room on this phone with no expiry and shows live on screen.
-            Offline answers use those notes when your words match them.
+            Saved memory stays in C@T hard save (Room) on this phone with no expiry and shows live on screen.
+            You set each note True, False, or Unsure. C@T does not decide that and is not a lie detector.
+            Confidence words and /remember can add a short note to the evolving memory feed, tagged Unsure until you change it.
+            Offline answers name the tag on notes your words match.
             C@T does not send texts or place calls. Your phone's own apps do that if you confirm.
             There is no separate message network and no paid API. Cloud is optional and falls back offline.
         """.trimIndent()

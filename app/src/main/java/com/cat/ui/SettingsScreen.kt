@@ -150,6 +150,15 @@ private fun CopilotSettings() {
         "Offline is the default (Australia/Perth, en-AU). It never waits on Wi-Fi. Cloud and Auto use a network only when one is available, then fall back offline.",
         color = Color(0xFFBFE8FF)
     )
+
+    Text(
+        "Forever backup: memory stays on this phone. When you ask Grok Bot to backup, exports go to the Google Drive folder C@T-Memory. C@T does not upload by itself.",
+        color = NeonMagenta
+    )
+    Text(
+        "C@T hard save keeps notes until you clear them. You set True, False, or Unsure. C@T does not decide that.",
+        color = Color(0xFFBFE8FF)
+    )
     Text(
         if (prefs.encrypted) {
             "API key is stored in encrypted preferences on this device. Leave it blank for a free local Ollama server."

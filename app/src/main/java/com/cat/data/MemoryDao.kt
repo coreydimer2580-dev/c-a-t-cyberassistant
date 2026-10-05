@@ -10,7 +10,7 @@ interface MemoryDao {
     @Insert
     suspend fun insert(memory: MemoryEntity)
 
-    /** Newest first. Rows stay until the user deletes them. There is no expiry. */
+    /** Newest first. No SQL LIMIT and no note-count cap. Rows stay until the user deletes them. */
     @Query("SELECT * FROM memory ORDER BY createdAt DESC, id DESC")
     suspend fun getAll(): List<MemoryEntity>
 
@@ -25,4 +25,7 @@ interface MemoryDao {
 
     @Query("SELECT COUNT(*) FROM memory")
     fun observeCount(): Flow<Int>
+
+    @Query("UPDATE memory SET truthTag = :truthTag WHERE id = :id")
+    suspend fun updateTruthTag(id: Long, truthTag: String)
 }

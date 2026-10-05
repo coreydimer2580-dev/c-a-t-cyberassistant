@@ -253,15 +253,15 @@ private fun LiveMemoryRail(memories: List<MemoryEntity>) {
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Text("Live memory", color = NeonMagenta, fontWeight = FontWeight.Black, fontSize = 14.sp)
-        Text("Saved on this phone. No expiry.", color = Mist, fontSize = 11.sp)
+        Text("C@T hard save", color = NeonMagenta, fontWeight = FontWeight.Black, fontSize = 14.sp)
+        Text("On this phone. No expiry. Tags are yours.", color = Mist, fontSize = 11.sp)
         if (memories.isEmpty()) {
             Text("Nothing yet. Try /remember tea is at 4", color = Paper, fontSize = 13.sp)
         } else {
             memories.take(8).forEach { note ->
                 val hot = note.id == flashId
                 Text(
-                    text = note.content,
+                    text = "[${com.cat.data.TruthTag.normalize(note.truthTag)}] ${note.content}",
                     color = if (hot) Color.Black else Paper,
                     fontWeight = if (hot) FontWeight.Bold else FontWeight.Medium,
                     fontSize = 13.sp,

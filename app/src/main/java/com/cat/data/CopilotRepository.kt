@@ -46,16 +46,9 @@ class CopilotRepository(
         )
         val all = database.chatDao().getAll()
         val prior = all.dropLast(1).map { it.role to it.content }
-        val offline = engine.respond(prepared.text, prior, memoryLines(), todoLines())
-        if (!offline.memoryToSave.isNullOrBlank()) {
-            database.memoryDao().insert(
-                MemoryEntity(
-                    content = offline.memoryToSave,
-                    category = "copilot",
-                    createdAt = System.currentTimeMillis()
-                )
-            )
-        }
+        val (lines, tags) = taggedMemory()
+        val offline = engine.respond(prepared.text, prior, lines, todoLines(), tags)
+        persistLearned(offline)
         if (!offline.todoToAdd.isNullOrBlank()) {
             prefs.saveTodos(prefs.loadTodos() + (false to offline.todoToAdd))
         }
@@ -71,8 +64,9 @@ class CopilotRepository(
         val lastUser = all[lastUserIndex]
         all.drop(lastUserIndex + 1).forEach { database.chatDao().deleteById(it.id) }
         val prior = all.take(lastUserIndex).map { it.role to it.content }
-        val offline = engine.respond(lastUser.content, prior, memoryLines(), todoLines())
-            .copy(memoryToSave = null, todoToAdd = null)
+        val (lines, tags) = taggedMemory()
+        val offline = engine.respond(lastUser.content, prior, lines, todoLines(), tags)
+            .copy(memoryToSave = null, todoToAdd = null, learnToSave = null)
         return storeReply(offline)
     }
 
@@ -140,7 +134,9 @@ class CopilotRepository(
     }
 
     private suspend fun cloudMessages(): List<Pair<String, String>> {
-        val notes = memoryLines().take(12).joinToString("\n").ifBlank { "(none)" }
+        val notes = database.memoryDao().getAll().take(12).joinToString("\n") {
+            "[${TruthTag.normalize(it.truthTag)}] ${it.content}"
+        }.ifBlank { "(none)" }
         val system = """
             You are C@T, a privacy-first assistant on the user's Android phone in Australia.
             Default behaviour is offline. Be concise, direct, and actionable.
@@ -148,6 +144,7 @@ class CopilotRepository(
             Do not claim you scanned the phone, files, messages, or sensors.
             Do not claim you can send SMS or place calls yourself. The phone's own apps do that.
             Do not role-play as a lie detector or investigator.
+            Truth tags are user-set True, False, or Unsure. Do not assign or change them.
             Home timezone is Australia/Perth. Locale is en-AU.
             Memory notes:
             $notes
@@ -158,6 +155,36 @@ class CopilotRepository(
 
     private suspend fun memoryLines(): List<String> {
         return database.memoryDao().getAll().map { it.content }
+    }
+
+    private suspend fun taggedMemory(): Pair<List<String>, List<String>> {
+        val notes = database.memoryDao().getAll()
+        return notes.map { it.content } to notes.map { TruthTag.normalize(it.truthTag) }
+    }
+
+    /** Hard-save and evolving-feed rows. Tags stay Unsure until the user changes them. */
+    private suspend fun persistLearned(offline: CopilotEngine.OfflineResult) {
+        val now = System.currentTimeMillis()
+        if (!offline.memoryToSave.isNullOrBlank()) {
+            database.memoryDao().insert(
+                MemoryEntity(
+                    content = offline.memoryToSave,
+                    category = "copilot",
+                    createdAt = now,
+                    truthTag = TruthTag.UNSURE
+                )
+            )
+        }
+        if (!offline.learnToSave.isNullOrBlank()) {
+            database.memoryDao().insert(
+                MemoryEntity(
+                    content = offline.learnToSave,
+                    category = "learn",
+                    createdAt = now,
+                    truthTag = TruthTag.UNSURE
+                )
+            )
+        }
     }
 
     private fun todoLines(): List<String> {

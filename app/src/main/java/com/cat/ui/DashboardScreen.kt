@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cat.CAtApplication
 import com.cat.data.MemoryEntity
+import com.cat.data.MemoryStorage
 import com.cat.model.FeatureToggle
 import com.cat.model.WorldState
 import com.cat.ui.theme.NeonCyan
@@ -114,18 +115,26 @@ fun DashboardScreen(
 
 @Composable
 private fun StatusCard(modeLabel: String, snippet: String, memories: List<MemoryEntity>) {
+    val context = LocalContext.current
+    val storage = remember(memories.size, memories.sumOf { it.content.length }) {
+        MemoryStorage.probe(context)
+    }
     NeonCard {
         Text("Copilot", color = NeonCyan, fontSize = 20.sp, fontWeight = FontWeight.Black)
         Text("Mode: $modeLabel", color = NeonLime, fontWeight = FontWeight.Bold)
         Text("Locale en-AU · Australia/Perth", color = Color(0xFFBFE8FF))
-        Text("Memory notes: ${memories.size} · no expiry", color = NeonMagenta, fontWeight = FontWeight.Bold)
+        Text(storage.label, color = NeonMagenta, fontWeight = FontWeight.Bold)
+        storage.warning?.let { warning ->
+            Text(warning, color = NeonLime, fontWeight = FontWeight.Bold)
+        }
+        Text("No expiry. Note count is not capped.", color = Color(0xFFBFE8FF))
         Text("Last reply: $snippet", color = Color(0xFFEAFBFF))
         Text("Live memory", color = NeonCyan, fontWeight = FontWeight.Black)
         if (memories.isEmpty()) {
             Text("Nothing saved yet. Chat /remember keeps a note on this phone.", color = Color(0xFFBFE8FF))
         } else {
             memories.take(5).forEach { note ->
-                Text("• ${note.content}", color = NeonLime, fontWeight = FontWeight.Medium)
+                Text("• [${com.cat.data.TruthTag.normalize(note.truthTag)}] ${note.content}", color = NeonLime, fontWeight = FontWeight.Medium)
             }
         }
     }

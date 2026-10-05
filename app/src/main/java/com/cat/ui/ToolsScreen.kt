@@ -288,7 +288,7 @@ private fun NotesCard() {
             }) { Text("Clear") }
         }
         notes.take(8).forEach { note ->
-            Text("• ${note.content}", color = Color(0xFFEAFBFF))
+            Text("• [${com.cat.data.TruthTag.normalize(note.truthTag)}] ${note.content}", color = Color(0xFFEAFBFF))
         }
     }
 }

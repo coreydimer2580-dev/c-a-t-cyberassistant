@@ -3,6 +3,7 @@ package com.cat.ui
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cat.CAtApplication
 import com.cat.data.MemoryEntity
+import com.cat.data.MemoryStorage
+import com.cat.data.TruthTag
 import com.cat.model.MemoryStack
 import com.cat.ui.theme.NeonCyan
 import com.cat.ui.theme.NeonLime
@@ -50,7 +54,11 @@ fun MemoryScreen(stacks: List<MemoryStack>, wide: Boolean) {
     val dao = (context.applicationContext as CAtApplication).database.memoryDao()
     val scope = rememberCoroutineScope()
     val notes by dao.observeAll().collectAsState(initial = emptyList())
+    val storage = remember(notes.size, notes.sumOf { it.content.length }) {
+        MemoryStorage.probe(context)
+    }
     var draft by remember { mutableStateOf("") }
+    var tag by remember { mutableStateOf(TruthTag.UNSURE) }
     var status by remember { mutableStateOf("") }
     var flashId by remember { mutableLongStateOf(-1L) }
     val newest = notes.firstOrNull()?.id
@@ -59,6 +67,47 @@ fun MemoryScreen(stacks: List<MemoryStack>, wide: Boolean) {
         flashId = id
         delay(1600)
         if (flashId == id) flashId = -1L
+    }
+    val onAdd: () -> Unit = {
+        val text = draft.trim()
+        if (text.isNotEmpty()) {
+            scope.launch {
+                runCatching {
+                    dao.insert(
+                        MemoryEntity(
+                            content = text,
+                            category = "note",
+                            createdAt = System.currentTimeMillis(),
+                            truthTag = TruthTag.normalize(tag)
+                        )
+                    )
+                    draft = ""
+                    status = "C@T hard-saved on this phone. No expiry. Tag: ${TruthTag.normalize(tag)}."
+                }.onFailure {
+                    status = it.message ?: "Save failed"
+                    Toast.makeText(context, status, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        Unit
+    }
+    val onClear: () -> Unit = {
+        scope.launch {
+            runCatching {
+                dao.clearAll()
+                status = "Cleared"
+            }.onFailure { status = it.message ?: "Clear failed" }
+        }
+        Unit
+    }
+    val onRetag: (MemoryEntity) -> Unit = { note ->
+        scope.launch {
+            val current = TruthTag.normalize(note.truthTag)
+            val next = TruthTag.ALL[(TruthTag.ALL.indexOf(current) + 1) % TruthTag.ALL.size]
+            runCatching { dao.updateTruthTag(note.id, next) }
+                .onFailure { status = it.message ?: "Tag update failed" }
+        }
+        Unit
     }
 
     if (wide) {
@@ -71,37 +120,16 @@ fun MemoryScreen(stacks: List<MemoryStack>, wide: Boolean) {
             NotesPane(
                 modifier = Modifier.weight(1.3f),
                 notes = notes,
+                storage = storage,
                 flashId = flashId,
                 draft = draft,
+                tag = tag,
                 status = status,
                 onDraft = { draft = it },
-                onAdd = {
-                    val text = draft.trim()
-                    if (text.isNotEmpty()) scope.launch {
-                        runCatching {
-                            dao.insert(
-                                MemoryEntity(
-                                    content = text,
-                                    category = "note",
-                                    createdAt = System.currentTimeMillis()
-                                )
-                            )
-                            draft = ""
-                            status = "Saved on this phone. No expiry."
-                        }.onFailure {
-                            status = it.message ?: "Save failed"
-                            Toast.makeText(context, status, Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                },
-                onClear = {
-                    scope.launch {
-                        runCatching {
-                            dao.clearAll()
-                            status = "Cleared"
-                        }.onFailure { status = it.message ?: "Clear failed" }
-                    }
-                }
+                onTag = { tag = it },
+                onAdd = onAdd,
+                onClear = onClear,
+                onRetag = onRetag
             )
             StackPane(stacks, Modifier.weight(1f))
         }
@@ -114,37 +142,16 @@ fun MemoryScreen(stacks: List<MemoryStack>, wide: Boolean) {
             NotesPane(
                 modifier = Modifier.weight(1.4f),
                 notes = notes,
+                storage = storage,
                 flashId = flashId,
                 draft = draft,
+                tag = tag,
                 status = status,
                 onDraft = { draft = it },
-                onAdd = {
-                    val text = draft.trim()
-                    if (text.isNotEmpty()) scope.launch {
-                        runCatching {
-                            dao.insert(
-                                MemoryEntity(
-                                    content = text,
-                                    category = "note",
-                                    createdAt = System.currentTimeMillis()
-                                )
-                            )
-                            draft = ""
-                            status = "Saved on this phone. No expiry."
-                        }.onFailure {
-                            status = it.message ?: "Save failed"
-                            Toast.makeText(context, status, Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                },
-                onClear = {
-                    scope.launch {
-                        runCatching {
-                            dao.clearAll()
-                            status = "Cleared"
-                        }.onFailure { status = it.message ?: "Clear failed" }
-                    }
-                }
+                onTag = { tag = it },
+                onAdd = onAdd,
+                onClear = onClear,
+                onRetag = onRetag
             )
             StackPane(stacks, Modifier.weight(0.9f).padding(top = 8.dp))
         }
@@ -155,20 +162,30 @@ fun MemoryScreen(stacks: List<MemoryStack>, wide: Boolean) {
 private fun NotesPane(
     modifier: Modifier,
     notes: List<MemoryEntity>,
+    storage: MemoryStorage.Snapshot,
     flashId: Long,
     draft: String,
+    tag: String,
     status: String,
     onDraft: (String) -> Unit,
+    onTag: (String) -> Unit,
     onAdd: () -> Unit,
-    onClear: () -> Unit
+    onClear: () -> Unit,
+    onRetag: (MemoryEntity) -> Unit
 ) {
+    val evolving = notes.filter { it.category == "learn" }
+    val hard = notes.filter { it.category != "learn" }
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Local notes", color = NeonCyan, fontSize = 28.sp, fontWeight = FontWeight.Black)
+        Text("C@T hard save", color = NeonCyan, fontSize = 28.sp, fontWeight = FontWeight.Black)
+        Text(storage.label, color = NeonMagenta, fontWeight = FontWeight.Bold)
+        storage.warning?.let { warning ->
+            Text(warning, color = NeonLime, fontWeight = FontWeight.Bold)
+        }
         Text(
-            "Live from Room on this phone. Kept until you clear them. No expiry. C@T does not read your files.",
+            "Live from Room on this phone. Kept until you clear them. You pick True, False, or Unsure. C@T does not decide and is not a lie detector.",
             color = Color(0xFFBFE8FF)
         )
         OutlinedTextField(
@@ -177,6 +194,15 @@ private fun NotesPane(
             modifier = Modifier.fillMaxWidth(),
             label = { Text("New note") }
         )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TruthTag.ALL.forEach { choice ->
+                FilterChip(
+                    selected = TruthTag.normalize(tag) == choice,
+                    onClick = { onTag(choice) },
+                    label = { Text(choice) }
+                )
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = onAdd) { Text("Add") }
             Button(onClick = onClear) { Text("Clear") }
@@ -190,25 +216,68 @@ private fun NotesPane(
                 .weight(1f),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(notes, key = { it.id }) { note ->
-                val hot = note.id == flashId
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(if (hot) Color(0xFF14210A) else Color(0xFF111821), RoundedCornerShape(16.dp))
-                        .border(1.dp, if (hot) NeonLime else NeonCyan.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
-                        .padding(16.dp)
-                ) {
-                    Text(note.content, color = if (hot) NeonLime else Color(0xFFEAFBFF), fontWeight = FontWeight.Bold)
-                    Text(note.category, color = NeonMagenta)
-                    Text(
-                        DateFormat.getDateTimeInstance().format(Date(note.createdAt)),
-                        color = Color(0xFFBFE8FF)
-                    )
-                }
+            item {
+                Text("Evolving memory", color = NeonMagenta, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                Text(
+                    "Short notes C@T keeps when you say remember or use a confidence word. Tagged Unsure until you tap the badge.",
+                    color = Color(0xFFBFE8FF),
+                    fontSize = 13.sp
+                )
+            }
+            if (evolving.isEmpty()) {
+                item { Text("No evolving notes yet.", color = Color(0xFFBFE8FF)) }
+            }
+            items(evolving, key = { "learn-${it.id}" }) { note ->
+                NoteCard(note, note.id == flashId, onRetag)
+            }
+            item { Text("All hard-saved notes", color = NeonCyan, fontWeight = FontWeight.Bold) }
+            items(hard, key = { "hard-${it.id}" }) { note ->
+                NoteCard(note, note.id == flashId, onRetag)
             }
         }
     }
+}
+
+@Composable
+private fun NoteCard(note: MemoryEntity, hot: Boolean, onRetag: (MemoryEntity) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(if (hot) Color(0xFF14210A) else Color(0xFF111821), RoundedCornerShape(16.dp))
+            .border(1.dp, if (hot) NeonLime else NeonCyan.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TagBadge(note.truthTag) { onRetag(note) }
+            Text(note.category, color = NeonMagenta)
+        }
+        Text(note.content, color = if (hot) NeonLime else Color(0xFFEAFBFF), fontWeight = FontWeight.Bold)
+        Text(
+            DateFormat.getDateTimeInstance().format(Date(note.createdAt)),
+            color = Color(0xFFBFE8FF)
+        )
+    }
+}
+
+@Composable
+private fun TagBadge(tag: String, onClick: () -> Unit) {
+    val label = TruthTag.normalize(tag)
+    val color = when (label) {
+        TruthTag.TRUE -> NeonLime
+        TruthTag.FALSE -> NeonMagenta
+        else -> NeonCyan
+    }
+    Text(
+        text = label,
+        color = Color.Black,
+        fontWeight = FontWeight.Black,
+        fontSize = 12.sp,
+        modifier = Modifier
+            .background(color, RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 2.dp)
+    )
 }
 
 @Composable

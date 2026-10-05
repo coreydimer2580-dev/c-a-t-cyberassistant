@@ -104,4 +104,43 @@ class CopilotEngineTest {
         assertTrue(result.reply.contains("no expiry"))
         assertTrue(result.reply.contains("tea is at 4"))
     }
+
+    @Test
+    fun taggedMemoryMatchNamesTheUserTag() {
+        val result = engine.respond(
+            "where is the meeting",
+            emptyList(),
+            listOf("meeting is in the lab"),
+            memoryTags = listOf("True")
+        )
+        assertTrue(result.reply.contains("[True]"))
+        assertTrue(result.reply.contains("lab"))
+        assertFalse(result.reply.contains("lie detector"))
+    }
+
+    @Test
+    fun rememberQueuesEvolvingNoteAsUnsureWordsOnly() {
+        val result = engine.respond("remember that tea is at 4", emptyList(), emptyList())
+        assertEquals("tea is at 4", result.memoryToSave)
+        assertEquals("tea is at 4", result.learnToSave)
+        assertTrue(result.reply.contains("Unsure"))
+        assertFalse(result.reply.contains("lie detector"))
+    }
+
+    @Test
+    fun confidenceKeywordQueuesLearnWithoutScoringTruth() {
+        val result = engine.respond("I know the gate code is 9", emptyList(), emptyList())
+        assertEquals("I know the gate code is 9", result.learnToSave)
+        assertNull(result.memoryToSave)
+        assertTrue(result.reply.contains("evolving memory"))
+        assertFalse(result.reply.contains("lie detector"))
+    }
+
+    @Test
+    fun plainChatDoesNotAutoLearn() {
+        val result = engine.respond("where is the kettle", emptyList(), emptyList())
+        assertNull(result.learnToSave)
+        assertNull(result.memoryToSave)
+    }
+
 }
