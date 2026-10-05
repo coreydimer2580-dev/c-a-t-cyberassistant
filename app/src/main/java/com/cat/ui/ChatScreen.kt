@@ -19,6 +19,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -147,7 +152,7 @@ fun ChatScreen(wide: Boolean, onOpenWheel: (() -> Unit)? = null) {
             val turn = runCatching { app.copilot.send(text) }.getOrElse {
                 com.cat.data.CopilotRepository.Turn(
                     app.copilot.history(),
-                    it.message ?: "Send failed"
+                    "Couldn't answer that one. Try again."
                 )
             }
             apply(turn, animate = true, fromUserSend = true)
@@ -160,51 +165,104 @@ fun ChatScreen(wide: Boolean, onOpenWheel: (() -> Unit)? = null) {
         if (count > 0) listState.animateScrollToItem(count - 1)
     }
 
+    fun regen() {
+        busy = true
+        scope.launch {
+            val turn = runCatching { app.copilot.regenerate() }.getOrElse {
+                com.cat.data.CopilotRepository.Turn(messages, "Couldn't regenerate. Try again.")
+            }
+            apply(turn, animate = true, fromUserSend = false)
+            busy = false
+        }
+    }
+
+    fun newChat() {
+        busy = true
+        speech.stop()
+        followUp = null
+        evolveStatus = null
+        notice = null
+        scope.launch {
+            apply(app.copilot.clear(), animate = false, fromUserSend = false)
+            busy = false
+        }
+    }
+
+    // Offline Auto = speak replies + offline group solve + evolve on send. No cloud needed.
+    val autoAll = autopilot && group
+    var showOptions by remember { mutableStateOf(false) }
+    val lastAssistantId = messages.lastOrNull { it.role == "assistant" }?.id
+
     Column(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        SystemStrip(
-            online = online,
-            mode = mode,
+        ChatTopBar(
             persona = persona,
-            group = group,
-            autopilot = autopilot,
-            onlineEvolve = onlineEvolve,
-            evolveStatus = evolveStatus,
-            onMode = {
-                mode = it
-                app.prefs.mode = it
-                when (it) {
-                    CopilotMode.OFFLINE -> {
-                        persona = AiPersona.OFFLINE_CAT
-                        app.prefs.persona = AiPersona.OFFLINE_CAT
-                    }
-                    CopilotMode.CLOUD -> {
-                        persona = AiPersona.CLOUD_GPT
-                        app.prefs.persona = AiPersona.CLOUD_GPT
-                    }
-                    CopilotMode.AUTO -> {
-                        persona = AiPersona.AUTO
-                        app.prefs.persona = AiPersona.AUTO
-                    }
-                }
+            mode = mode,
+            online = online,
+            autoAll = autoAll,
+            busy = busy,
+            onAuto = {
+                val on = !autoAll
+                autopilot = on
+                app.prefs.autopilot = on
+                group = on
+                app.prefs.groupSolver = on
+                if (!on) speech.stop()
+                notice = if (on) "Auto on · talks, solves with offline voices, evolves on send." else null
             },
-            onGroup = {
-                group = it
-                app.prefs.groupSolver = it
-            },
-            onAutopilot = {
-                autopilot = it
-                app.prefs.autopilot = it
-                if (!it) speech.stop()
-            },
-            onOnlineEvolve = {
-                onlineEvolve = it
-                app.prefs.onlineEvolve = it
-            },
-            onOpenWheel = onOpenWheel
+            onOptions = { showOptions = !showOptions },
+            optionsOpen = showOptions,
+            onNewChat = { newChat() }
         )
+
+        if (showOptions) {
+            SystemStrip(
+                online = online,
+                mode = mode,
+                persona = persona,
+                group = group,
+                autopilot = autopilot,
+                onlineEvolve = onlineEvolve,
+                evolveStatus = evolveStatus,
+                onMode = {
+                    mode = it
+                    app.prefs.mode = it
+                    when (it) {
+                        CopilotMode.OFFLINE -> {
+                            persona = AiPersona.OFFLINE_CAT
+                            app.prefs.persona = AiPersona.OFFLINE_CAT
+                        }
+                        CopilotMode.CLOUD -> {
+                            persona = AiPersona.CLOUD_GPT
+                            app.prefs.persona = AiPersona.CLOUD_GPT
+                        }
+                        CopilotMode.AUTO -> {
+                            persona = AiPersona.AUTO
+                            app.prefs.persona = AiPersona.AUTO
+                        }
+                    }
+                    if (it != CopilotMode.OFFLINE && !app.prefs.cloudReady) {
+                        notice = "No cloud saved, so replies stay offline. Add your own endpoint in Settings if you want one."
+                    }
+                },
+                onGroup = {
+                    group = it
+                    app.prefs.groupSolver = it
+                },
+                onAutopilot = {
+                    autopilot = it
+                    app.prefs.autopilot = it
+                    if (!it) speech.stop()
+                },
+                onOnlineEvolve = {
+                    onlineEvolve = it
+                    app.prefs.onlineEvolve = it
+                },
+                onOpenWheel = onOpenWheel
+            )
+        }
 
         Row(
             modifier = Modifier.fillMaxWidth().weight(1f),
@@ -212,85 +270,47 @@ fun ChatScreen(wide: Boolean, onOpenWheel: (() -> Unit)? = null) {
         ) {
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    CatWordmark(size = 36.sp)
-                    Text("C@T terminal", color = NeonLime, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    TextButton(onClick = {
-                        busy = true
-                        speech.stop()
-                        followUp = null
-                        evolveStatus = null
-                        scope.launch {
-                            apply(app.copilot.clear(), animate = false, fromUserSend = false)
-                            busy = false
-                        }
-                    }, enabled = !busy) {
-                        Text("New chat", color = NeonMagenta, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    if (messages.isEmpty() && !busy) {
+                        item { EmptyChatHint(onPick = { send(it) }) }
+                    }
+                    items(messages, key = { it.id }) { message ->
+                        ChatBubble(
+                            message = message,
+                            stream = message.id == streamId && message.role == "assistant",
+                            showActions = message.id == lastAssistantId && !busy,
+                            onSpeak = { speech.speak(message.content, flush = true) },
+                            onRegen = { regen() }
+                        )
+                    }
+                    if (busy) {
+                        item { ThinkingBubble(if (group) "Group" else persona.shortLabel) }
                     }
                 }
 
                 if (!notice.isNullOrBlank()) {
                     Text(
                         text = notice.orEmpty(),
-                        color = Paper,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .neonCard(accent = NeonMagenta, shape = RoundedCornerShape(12.dp), fill = Color(0xFF3A1030), glow = 10.dp)
-                            .padding(10.dp)
+                        color = Mist,
+                        fontSize = 12.sp,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
                     )
-                }
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .neonCard(accent = NeonLime, shape = RoundedCornerShape(12.dp), fill = Color(0xFF050805), glow = 10.dp)
-                        .padding(10.dp)
-                ) {
-                    Text(
-                        "C@T terminal · offline-first · Fold ready",
-                        color = NeonLime,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        if (messages.isEmpty() && !busy) {
-                            item { EmptyChatHint(persona, group, autopilot) }
-                        }
-                        items(messages, key = { it.id }) { message ->
-                            TerminalLine(message, stream = message.id == streamId && message.role == "assistant")
-                        }
-                        if (busy) {
-                            item { ThinkingBubble(if (group) "Group" else persona.shortLabel) }
-                        }
-                    }
                 }
 
                 if (!followUp.isNullOrBlank()) {
                     Text(
-                        text = "Next · tap to ask",
-                        color = Mist,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
                         text = followUp.orEmpty(),
-                        color = Color.Black,
-                        fontWeight = FontWeight.Bold,
+                        color = Paper,
                         fontSize = 13.sp,
                         modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(NeonLime)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color(0xFF1E2228))
                             .clickable(enabled = !busy) {
                                 val q = followUp.orEmpty()
                                 followUp = null
@@ -300,46 +320,14 @@ fun ChatScreen(wide: Boolean, onOpenWheel: (() -> Unit)? = null) {
                     )
                 }
 
-                Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    listOf("/help", "/remember ", "/recall", "explain this", "give me options").forEach { command ->
-                        TextButton(onClick = { draft = command }) {
-                            Text(command.trim(), color = NeonLime, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                        }
-                    }
-                }
-
                 Composer(draft = draft, enabled = !busy, onDraft = { draft = it }, onSend = { send() })
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = {
-                            busy = true
-                            scope.launch {
-                                val turn = runCatching { app.copilot.regenerate() }.getOrElse {
-                                    com.cat.data.CopilotRepository.Turn(messages, it.message ?: "Regenerate failed")
-                                }
-                                apply(turn, animate = true, fromUserSend = false)
-                                busy = false
-                            }
-                        },
-                        enabled = !busy && messages.any { it.role == "user" }
-                    ) { Text("Regen", color = NeonCyan) }
-                    OutlinedButton(
-                        onClick = {
-                            busy = true
-                            speech.stop()
-                            followUp = null
-                            scope.launch {
-                                apply(app.copilot.clear(), animate = false, fromUserSend = false)
-                                busy = false
-                            }
-                        },
-                        enabled = !busy && messages.isNotEmpty()
-                    ) { Text("Clear", color = NeonMagenta) }
-                }
+                Text(
+                    "C@T runs offline on this phone. It can make mistakes.",
+                    color = Color(0xFF6B7380),
+                    fontSize = 10.sp,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp),
+                    textAlign = TextAlign.Center
+                )
             }
 
             if (wide) {
@@ -353,7 +341,7 @@ fun ChatScreen(wide: Boolean, onOpenWheel: (() -> Unit)? = null) {
                             append(persona.label)
                             append(if (group) " · Group" else " · Single")
                             append(if (online) " · Online" else " · Offline")
-                            if (autopilot) append(" · Autopilot")
+                            if (autopilot) append(" · Talk")
                         },
                         color = Mist,
                         fontSize = 12.sp
@@ -365,6 +353,67 @@ fun ChatScreen(wide: Boolean, onOpenWheel: (() -> Unit)? = null) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ChatTopBar(
+    persona: AiPersona,
+    mode: CopilotMode,
+    online: Boolean,
+    autoAll: Boolean,
+    busy: Boolean,
+    onAuto: () -> Unit,
+    onOptions: () -> Unit,
+    optionsOpen: Boolean,
+    onNewChat: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(10.dp))
+                .clickable(onClick = onOptions)
+                .padding(horizontal = 6.dp, vertical = 4.dp)
+        ) {
+            Text(
+                "C@T " + (if (optionsOpen) "▴" else "▾"),
+                color = Paper,
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp
+            )
+            Text(
+                persona.shortLabel + " · " + mode.label + (if (online) "" else " · no network"),
+                color = Mist,
+                fontSize = 11.sp
+            )
+        }
+        Text(
+            text = if (autoAll) "Auto ON" else "Auto",
+            color = if (autoAll) Color.Black else Paper,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp,
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .background(if (autoAll) NeonLime else Color(0xFF1E2228))
+                .clickable(onClick = onAuto)
+                .padding(horizontal = 14.dp, vertical = 8.dp)
+        )
+        Text(
+            text = "✎ New",
+            color = Paper,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp,
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .background(Color(0xFF1E2228))
+                .clickable(enabled = !busy, onClick = onNewChat)
+                .padding(horizontal = 14.dp, vertical = 8.dp)
+        )
     }
 }
 
@@ -423,7 +472,7 @@ private fun SystemStrip(
             }
         }
         Text(
-            ProductGuide.SPEECH + " Online evolve runs only when you send. Not in the background. This app does not update itself.",
+            "Auto = talk + offline group solve + evolve on send. Cloud is optional and only used if you saved your own endpoint.",
             color = Color(0xFF8FB8A0),
             fontSize = 11.sp
         )
@@ -465,20 +514,33 @@ private fun StatusChip(
 }
 
 @Composable
-private fun EmptyChatHint(persona: AiPersona, group: Boolean, autopilot: Boolean) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("C@T> boot — Australia/Perth · en-AU", color = NeonLime, fontFamily = FontFamily.Monospace, fontSize = 13.sp)
-        Text(
-            "C@T> session ready · ${persona.shortLabel}" +
-                (if (group) " · group" else "") +
-                (if (autopilot) " · autopilot" else ""),
-            color = Mist,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 12.sp
-        )
-        Text("C@T> type below. Offline works. " + ProductGuide.PATH + ".", color = Paper, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-        Text("C@T> speech is this tab only. Terminal does not speak.", color = Mist, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-        Text("C@T> try: /help · /remember tea is at 4 · plan my day", color = NeonCyan, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+private fun EmptyChatHint(onPick: (String) -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = 48.dp, start = 8.dp, end = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        CatWordmark(size = 40.sp)
+        Text("What can I help with?", color = Paper, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text("Works offline. No account, no key needed.", color = Mist, fontSize = 12.sp)
+        listOf(
+            "Plan my day",
+            "Give me options for dinner",
+            "Explain this simply",
+            "/remember tea is at 4"
+        ).forEach { prompt ->
+            Text(
+                text = prompt,
+                color = Paper,
+                fontSize = 14.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF171A1F))
+                    .clickable { onPick(prompt) }
+                    .padding(horizontal = 14.dp, vertical = 12.dp)
+            )
+        }
     }
 }
 
@@ -524,63 +586,56 @@ private fun LiveMemoryRail(memories: List<MemoryEntity>) {
 
 @Composable
 private fun Composer(draft: String, enabled: Boolean, onDraft: (String) -> Unit, onSend: () -> Unit) {
-    val shape = RoundedCornerShape(10.dp)
+    val canSend = enabled && draft.isNotBlank()
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .neonCard(accent = NeonCyan, shape = shape, fill = Color(0xFF050805), glow = 12.dp)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .clip(RoundedCornerShape(26.dp))
+            .background(Color(0xFF1E2228))
+            .padding(start = 18.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            "C@T>",
-            color = NeonLime,
-            fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.Bold,
-            fontSize = 14.sp,
-            modifier = Modifier.padding(end = 8.dp)
-        )
         BasicTextField(
             value = draft,
             onValueChange = onDraft,
             enabled = enabled,
-            textStyle = TextStyle(
-                color = Paper,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
-                fontFamily = FontFamily.Monospace
-            ),
+            textStyle = TextStyle(color = Paper, fontSize = 16.sp),
             cursorBrush = SolidColor(NeonLime),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
             keyboardActions = KeyboardActions(onSend = { onSend() }),
-            maxLines = 5,
+            maxLines = 6,
             modifier = Modifier.weight(1f).padding(vertical = 10.dp),
             decorationBox = { inner ->
                 Box {
                     if (draft.isEmpty()) {
-                        Text("message…", color = Color(0xFF4A6A56), fontFamily = FontFamily.Monospace)
+                        Text("Message C@T", color = Color(0xFF7A828E), fontSize = 16.sp)
                     }
                     inner()
                 }
             }
         )
-        TextButton(onClick = onSend, enabled = enabled && draft.isNotBlank()) {
-            Text(
-                "run",
-                color = Color.Black,
-                fontWeight = FontWeight.Black,
-                fontFamily = FontFamily.Monospace,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(if (enabled && draft.isNotBlank()) NeonLime else Color(0xFF1C3036))
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-            )
+        Box(
+            modifier = Modifier
+                .padding(start = 6.dp)
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(if (canSend) Paper else Color(0xFF3A3F47))
+                .clickable(enabled = canSend, onClick = onSend),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("↑", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 20.sp)
         }
     }
 }
 
 @Composable
-private fun TerminalLine(message: ChatMessage, stream: Boolean) {
+private fun ChatBubble(
+    message: ChatMessage,
+    stream: Boolean,
+    showActions: Boolean,
+    onSpeak: () -> Unit,
+    onRegen: () -> Unit
+) {
     val fromUser = message.role == "user"
     val full = message.content
     var shown by remember(message.id) { mutableStateOf(if (stream) "" else full) }
@@ -598,39 +653,76 @@ private fun TerminalLine(message: ChatMessage, stream: Boolean) {
         }
     }
     val live = stream && shown.length < full.length
-    val prefix = when {
-        fromUser -> "you>"
-        message.personaId == "group" -> "group>"
-        message.personaId.isNotBlank() -> AiPersona.fromId(message.personaId).shortLabel.lowercase() + ">"
-        else -> "cat>"
-    }
-    val accent = when {
-        fromUser -> NeonCyan
-        message.personaId == "group" -> NeonMagenta
-        else -> NeonLime
-    }
-    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Row {
+    val clipboard = LocalClipboardManager.current
+    var copied by remember(message.id) { mutableStateOf(false) }
+
+    if (fromUser) {
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
             Text(
-                text = prefix,
-                color = accent,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold,
-                fontSize = 13.sp,
-                modifier = Modifier.padding(end = 8.dp)
-            )
-            Text(
-                text = if (live) "$shown█" else shown,
+                text = shown,
                 color = Paper,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 13.sp,
-                modifier = Modifier.weight(1f)
+                fontSize = 15.sp,
+                modifier = Modifier
+                    .widthIn(max = 320.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color(0xFF2A2F37))
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
             )
         }
-        if (message.filtered) {
-            Text("  # redacted before save", color = NeonMagenta, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+        return
+    }
+
+    val who = when {
+        message.personaId == "group" -> "C@T · Group"
+        message.personaId.isNotBlank() -> "C@T · " + AiPersona.fromId(message.personaId).shortLabel
+        else -> "C@T"
+    }
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(if (message.personaId == "group") NeonMagenta else NeonLime),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("@", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 14.sp)
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(who, color = Mist, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Text(
+                text = if (live) "$shown ●" else shown,
+                color = Paper,
+                fontSize = 15.sp,
+                lineHeight = 22.sp
+            )
+            if (message.filtered) {
+                Text("Private details redacted before save", color = NeonMagenta, fontSize = 11.sp)
+            }
+            if (showActions && !live) {
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    ActionText(if (copied) "Copied" else "Copy") {
+                        clipboard.setText(AnnotatedString(full))
+                        copied = true
+                    }
+                    ActionText("Speak", onSpeak)
+                    ActionText("Regenerate", onRegen)
+                }
+            }
         }
     }
+}
+
+@Composable
+private fun ActionText(label: String, onClick: () -> Unit) {
+    Text(
+        text = label,
+        color = Color(0xFF9AA3AE),
+        fontSize = 12.sp,
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 4.dp)
+    )
 }
 
 @Composable
@@ -643,11 +735,10 @@ private fun ThinkingBubble(who: String) {
         label = "think-alpha"
     )
     Text(
-        text = "${who.lowercase()}> ● ● ●",
-        color = NeonCyan.copy(alpha = alpha),
-        fontFamily = FontFamily.Monospace,
-        fontWeight = FontWeight.Bold,
-        fontSize = 13.sp
+        text = "$who is thinking ● ● ●",
+        color = Mist.copy(alpha = alpha),
+        fontSize = 13.sp,
+        modifier = Modifier.padding(start = 38.dp)
     )
 }
 

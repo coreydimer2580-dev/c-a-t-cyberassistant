@@ -197,7 +197,7 @@ private fun CopilotSettings() {
 
     Text("How C@T answers", color = NeonCyan, fontSize = 28.sp)
     Text(
-        "Pick one. Offline never needs Wi-Fi. Cloud is used only if you already saved an address.",
+        "Offline is the default and needs nothing. Try Cloud is optional and only works with your own endpoint.",
         color = Color(0xFFBFE8FF)
     )
     Button(
@@ -212,16 +212,16 @@ private fun CopilotSettings() {
         onClick = {
             mode = CopilotMode.AUTO
             prefs.mode = CopilotMode.AUTO
-            saved = if (baseUrl.isBlank()) {
-                "Auto is on. No cloud address yet, so replies stay offline."
+            saved = if (!prefs.cloudReady) {
+                "No cloud saved, so replies stay offline. That's fine — Offline works with none."
             } else {
-                "Auto is on. C@T tries the saved cloud, then stays offline if that fails."
+                "Try Cloud is on. C@T uses your endpoint, and quietly answers offline if it can't reach it."
             }
         },
         modifier = Modifier.fillMaxWidth()
-    ) { Text("Try Cloud if set", fontSize = 18.sp) }
+    ) { Text("Try Cloud (optional)", fontSize = 18.sp) }
     Text(
-        if (mode == CopilotMode.OFFLINE) "Now: offline only." else "Now: try cloud when an address is saved.",
+        if (mode == CopilotMode.OFFLINE) "Now: offline only." else if (prefs.cloudReady) "Now: try your cloud, offline fallback." else "Now: offline (no cloud saved).",
         color = NeonLime
     )
     Text(
@@ -245,7 +245,12 @@ private fun CopilotSettings() {
         onValueChange = { baseUrl = it },
         modifier = Modifier.fillMaxWidth(),
         label = { Text("Base URL") },
-        placeholder = { Text(CopilotPrefs.EMULATOR_OLLAMA_URL) }
+        placeholder = { Text(CopilotPrefs.URL_HINT) }
+    )
+    Text(
+        "Needs your own free endpoint (e.g. a Groq or OpenRouter key you add). Offline works with none. C@T ships with no key.",
+        color = Color(0xFFBFE8FF),
+        fontSize = 12.sp
     )
     OutlinedTextField(
         value = apiKey,
@@ -262,20 +267,28 @@ private fun CopilotSettings() {
     )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = {
-            prefs.baseUrl = baseUrl
             prefs.apiKey = apiKey
             prefs.model = model
-            saved = "Cloud settings saved. Offline stays available if the network fails."
+            saved = when {
+                baseUrl.isBlank() -> { prefs.baseUrl = ""; "No cloud address. Offline only." }
+                CopilotPrefs.isLocalOnlyUrl(baseUrl) -> {
+                    prefs.baseUrl = ""
+                    baseUrl = ""
+                    "That address only works inside an emulator, not on a real phone. Not saved — Offline stays on."
+                }
+                !CopilotPrefs.looksLikeUrl(baseUrl) -> "That doesn't look like a web address (https://…). Not saved."
+                else -> { prefs.baseUrl = baseUrl; "Saved. C@T quietly answers offline if it can't reach it." }
+            }
         }) { Text("Save") }
         OutlinedButton(onClick = {
-            baseUrl = CopilotPrefs.EMULATOR_OLLAMA_URL
-            model = CopilotPrefs.DEFAULT_MODEL
+            baseUrl = ""
             apiKey = ""
-            prefs.baseUrl = baseUrl
-            prefs.model = model
+            prefs.baseUrl = ""
             prefs.apiKey = ""
-            saved = "Emulator host set to 10.0.2.2 for a free local Ollama. Mode stays ${mode.label} until you change it."
-        }) { Text("Emulator 10.0.2.2") }
+            mode = CopilotMode.OFFLINE
+            prefs.mode = CopilotMode.OFFLINE
+            saved = "Cloud cleared. Offline only."
+        }) { Text("Clear cloud") }
     }
     if (saved.isNotEmpty()) {
         Text(saved, color = NeonLime)

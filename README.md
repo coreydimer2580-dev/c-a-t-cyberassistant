@@ -1,6 +1,6 @@
 # C@T - Cyber AI Assistant
 
-Version 1.13 — one path across Terminal, Chat, Wheel, Memory, and Settings. Kotlin, Jetpack Compose, Room. Neon cyan, magenta, and lime on black.
+Version 1.14 — offline-first with zero cloud errors on real phones, ChatGPT-style Chat, one-tap Offline Auto. Kotlin, Jetpack Compose, Room. Neon cyan, magenta, and lime on black.
 
 Opens on **Terminal**. Primary tabs: **Terminal · Chat · Wheel · Memory · Settings**.
 

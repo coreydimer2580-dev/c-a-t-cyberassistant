@@ -651,9 +651,9 @@ class CopilotEngine(
         """.trimIndent()
         private val SETTINGS_REPLY = """
             Offline is the default and stays on this device. It does not wait for Wi-Fi.
-            Cloud and Auto can use a network when one is available, then fall back offline.
-            Point the base URL at a free local Ollama server if you want that. No paid API is required.
-            Emulator host preset is 10.0.2.2.
+            Try Cloud is optional. It needs your own free endpoint (e.g. a Groq or OpenRouter key you add).
+            With no endpoint saved, every reply stays offline with no errors.
+            Emulator-only addresses like 10.0.2.2 are ignored on a real phone.
             The API key is stored in encrypted preferences on the phone. C@T never reads other apps.
         """.trimIndent()
         private val FOLD_REPLY = """

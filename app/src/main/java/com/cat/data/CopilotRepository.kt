@@ -222,18 +222,16 @@ class CopilotRepository(
         }
         val replies = deferred.map { it.await() }.toMutableList()
 
-        val wantCloud = prefs.mode == CopilotMode.CLOUD || prefs.mode == CopilotMode.AUTO
-        var notice: String? = "Group solver · offline voices"
+        // Offline voices only, unless a real non-emulator URL + key are saved.
+        val wantCloud = (prefs.mode == CopilotMode.CLOUD || prefs.mode == CopilotMode.AUTO) &&
+            prefs.groupCloudReady &&
+            runCatching { networkAvailable() }.getOrDefault(false)
+        var notice: String? = null
         if (wantCloud) {
-            val cloudText = runCatching { pullCloud() }.getOrElse { err ->
-                notice = "Group solver · cloud skipped (${err.message?.take(80) ?: "error"})"
-                null
-            }
+            val cloudText = runCatching { pullCloud() }.getOrNull()
             if (!cloudText.isNullOrBlank()) {
                 replies.add(GroupSolver.PersonaReply(AiPersona.CLOUD_GPT, cloudText.trim()))
-                notice = "Group solver · offline + cloud"
-            } else if (notice == "Group solver · offline voices" && prefs.mode == CopilotMode.CLOUD) {
-                notice = "Group solver · cloud unavailable, offline only"
+                notice = "Group · offline + cloud"
             }
         }
 
@@ -336,7 +334,6 @@ class CopilotRepository(
         if (persistOnline && prefs.onlineEvolve) {
             val online = runCatching { networkAvailable() }.getOrDefault(false)
             if (!online) {
-                notice = listOfNotNull(notice, "Online evolve skipped — offline.").joinToString(" ")
                 status = (status ?: "Evolving") + " · offline only"
             } else {
                 val topic = EvolveEngine.rankTopics(listOf(userText) + memories.take(3))
@@ -360,7 +357,6 @@ class CopilotRepository(
                     }
                     status = (status ?: "Evolving") + " · online ${hit.source}"
                 } else {
-                    notice = listOfNotNull(notice, "Online evolve found nothing public.").joinToString(" ")
                     status = (status ?: "Evolving") + " · no public hit"
                 }
             }
@@ -373,13 +369,13 @@ class CopilotRepository(
     }
 
     private fun personaLabelForStore(persona: AiPersona, notice: String?): String {
-        if (notice != null && (notice.contains("Answered offline") || notice.contains("No network") || notice.contains("No cloud"))) {
+        if (notice != null && (notice.startsWith("Offline reply"))) {
             return if (persona.isModePersona) AiPersona.OFFLINE_CAT.id else persona.id
         }
         return when {
             persona.linkedMode == CopilotMode.CLOUD && notice == null -> AiPersona.CLOUD_GPT.id
             persona.linkedMode == CopilotMode.AUTO && notice == null && prefs.mode == CopilotMode.AUTO ->
-                if (prefs.baseUrl.isNotBlank()) AiPersona.CLOUD_GPT.id else AiPersona.OFFLINE_CAT.id
+                if (prefs.cloudReady) AiPersona.CLOUD_GPT.id else AiPersona.OFFLINE_CAT.id
             else -> persona.id
         }
     }
@@ -389,23 +385,15 @@ class CopilotRepository(
         if (offline.skipCloud || mode == CopilotMode.OFFLINE) {
             return offline.reply to null
         }
+        // No real cloud saved (blank or emulator-only): answer offline silently.
+        if (!prefs.cloudReady) return offline.reply to null
         val online = runCatching { networkAvailable() }.getOrDefault(false)
-        if (!online) {
-            return offline.reply to "No network. Answered offline."
-        }
-        if (prefs.baseUrl.isBlank()) {
-            return offline.reply to "No cloud base URL. Answered offline."
-        }
+        if (!online) return offline.reply to "Offline reply (no network)."
         return try {
             val raw = pullCloud(persona)
-            if (raw.isBlank()) {
-                offline.reply to "Cloud returned an empty reply. Answered offline."
-            } else {
-                raw to null
-            }
-        } catch (error: Exception) {
-            val detail = error.message?.take(140) ?: error.javaClass.simpleName
-            offline.reply to "Cloud failed ($detail). Answered offline."
+            if (raw.isBlank()) offline.reply to "Offline reply (cloud was quiet)." else raw to null
+        } catch (_: Exception) {
+            offline.reply to "Offline reply (cloud unreachable)."
         }
     }
 
@@ -459,18 +447,16 @@ class CopilotRepository(
         if (offline.skipCloud || mode == CopilotMode.OFFLINE) {
             return spoken to null
         }
+        if (!prefs.cloudReady) return spoken to null
         val online = runCatching { networkAvailable() }.getOrDefault(false)
-        if (!online) return spoken to "No network. Answered offline."
-        if (prefs.baseUrl.isBlank()) return spoken to "No cloud base URL. Answered offline."
+        if (!online) return spoken to "Offline reply (no network)."
         return try {
             val raw = withContext(Dispatchers.IO) {
                 cloud.complete(prefs.baseUrl, prefs.apiKey, prefs.model, promptFor(persona, history.takeLast(16)))
             }
-            if (raw.isBlank()) spoken to "Cloud returned an empty reply. Answered offline."
-            else raw to null
-        } catch (error: Exception) {
-            val detail = error.message?.take(140) ?: error.javaClass.simpleName
-            spoken to "Cloud failed ($detail). Answered offline."
+            if (raw.isBlank()) spoken to "Offline reply (cloud was quiet)." else raw to null
+        } catch (_: Exception) {
+            spoken to "Offline reply (cloud unreachable)."
         }
     }
 

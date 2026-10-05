@@ -20,7 +20,33 @@ class CopilotPrefs(context: Context) {
             prefs = context.getSharedPreferences("cat_prefs_plain", Context.MODE_PRIVATE)
             encrypted = false
         }
+        migrateEmulatorUrl()
     }
+
+    /**
+     * v1.14: an emulator / loopback base URL can never work on a real phone.
+     * Clear it once and drop back to Offline so nothing tries to connect.
+     */
+    private fun migrateEmulatorUrl() {
+        val stored = prefs.getString(KEY_URL, "").orEmpty()
+        if (stored.isNotBlank() && isLocalOnlyUrl(stored)) {
+            prefs.edit()
+                .putString(KEY_URL, "")
+                .putString(KEY_MODE, CopilotMode.OFFLINE.storage)
+                .apply()
+        }
+    }
+
+    /** True only for a real, non-emulator https/http URL. Offline is used otherwise. */
+    val cloudReady: Boolean
+        get() {
+            val url = baseUrl
+            return url.isNotBlank() && !isLocalOnlyUrl(url) && looksLikeUrl(url)
+        }
+
+    /** Group solver may add a cloud voice only with a real URL *and* a key. */
+    val groupCloudReady: Boolean
+        get() = cloudReady && apiKey.isNotBlank()
 
     var mode: CopilotMode
         get() = CopilotMode.fromStorage(prefs.getString(KEY_MODE, CopilotMode.OFFLINE.storage))
@@ -62,7 +88,8 @@ class CopilotPrefs(context: Context) {
     var baseUrl: String
         get() = prefs.getString(KEY_URL, "").orEmpty()
         set(value) {
-            prefs.edit().putString(KEY_URL, value.trim()).apply()
+            val clean = value.trim()
+            prefs.edit().putString(KEY_URL, if (isLocalOnlyUrl(clean)) "" else clean).apply()
         }
 
     var apiKey: String
@@ -145,7 +172,30 @@ class CopilotPrefs(context: Context) {
 
     companion object {
         const val DEFAULT_MODEL = "llama3.2"
-        const val EMULATOR_OLLAMA_URL = "http://10.0.2.2:11434/v1"
+        /** Shown as a hint only. Never saved by default. */
+        const val URL_HINT = "https://api.groq.com/openai/v1"
+
+        private val LOCAL_HOSTS = listOf(
+            "10.0.2.2", "10.0.3.2", "localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]"
+        )
+
+        /** Emulator-only or loopback hosts. These never reach anything from a real phone. */
+        fun isLocalOnlyUrl(url: String): Boolean {
+            val lower = url.trim().lowercase()
+            if (lower.isBlank()) return false
+            val host = lower.substringAfter("://", lower)
+                .substringBefore('/')
+                .substringBeforeLast(':')
+                .removePrefix("[").removeSuffix("]")
+            return LOCAL_HOSTS.any { it.removePrefix("[").removeSuffix("]") == host } ||
+                host.startsWith("127.") || lower.contains("10.0.2.2")
+        }
+
+        fun looksLikeUrl(url: String): Boolean {
+            val lower = url.trim().lowercase()
+            return (lower.startsWith("https://") || lower.startsWith("http://")) &&
+                lower.substringAfter("://").substringBefore('/').contains('.')
+        }
         private const val KEY_MODE = "mode"
         private const val KEY_PERSONA = "persona"
         private const val KEY_GROUP = "group_solver"

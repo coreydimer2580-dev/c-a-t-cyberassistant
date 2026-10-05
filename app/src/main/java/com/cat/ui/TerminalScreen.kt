@@ -333,7 +333,7 @@ private fun TerminalConsole(
                 )
             }.getOrElse {
                 com.cat.data.CopilotRepository.TerminalAnswer(
-                    it.message ?: "Terminal reply failed.",
+                    "Couldn't answer that one. Try again.",
                     null
                 )
             }
